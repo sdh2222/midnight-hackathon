@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Env templates present
+        run: |
+          test -f .env.example
+          test -f .env.preview.example
+          test -f .env.preprod.example
+      - name: Install and test
+        if: hashFiles('package.json') != ''
+        run: |
+          npm ci
+          npm test --if-present

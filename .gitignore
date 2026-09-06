@@ -1,0 +1,51 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Env and secrets — never commit real values
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Midnight / Compact
+*.compactc
+keys/
+zkir/
+.midnight-state.json
+.mn-app/
+proof-server.log
+accounts.json
+
+# Node / build
+dist/
+build/
+coverage/
+.turbo/
+.next/
+out/
+
+# Logs and temp
+*.log
+*.tmp
+tmp/
+.cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Keep agent folders if we add them later
+!.agent/
+!.claude/
