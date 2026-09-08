@@ -4,6 +4,12 @@ Date: 2026-09-08
 Hackathon: Midnight Korea 2026 (submit by 2026-09-28 00:00 KST)
 Working title: **Caplock**
 
+**Superseded as product direction** by
+[2026-09-08-caplock-prd.md](./2026-09-08-caplock-prd.md)
+and the boards in
+[`docs/superpowers/diagrams/caplock-architecture.excalidraw`](../diagrams/caplock-architecture.excalidraw).
+Keep this file for K-ETS vocabulary only.
+
 One sentence: a plant proves to a bank, buyer, or supplier that a **verifier-locked** measurement meets a public intensity cap, without putting production or emissions on the ledger.
 
 This document is the information architecture and scope for pre-build. It is not an implementation plan.
