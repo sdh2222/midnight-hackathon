@@ -1,0 +1,19 @@
+{
+  "name": "Midnight Hackathon",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "proof-server",
+      "command": "bash .cursor/proof-server.sh",
+      "description": "Midnight ZK proof server on http://127.0.0.1:6300 (matches PROOF_SERVER_URL in the .env templates)."
+    }
+  ],
+  "ports": [
+    {
+      "name": "proof-server",
+      "port": 6300
+    }
+  ]
+}
