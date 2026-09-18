@@ -24,7 +24,17 @@ GitHub Environments with the same names (`development`, `preview`, `preprod`) ho
 
 ## Branch rules
 
-`main` is protected: changes go through a pull request. No force-push, no deleting `main`.
+`dev` is the integration branch. Create feature, fix, or docs branches from `dev`
+and open pull requests into `dev`. Run the demo path on `dev` after integrating
+frontend, agents, and Midnight changes.
+
+`main` holds the final reviewed result. Open a pull request from `dev` to
+`main` only after the integrated demo and CI pass. Do not commit directly to
+`main`. Do not force-push or delete `dev` or `main`.
+
+Repository administrators should require pull requests and passing CI for both
+`dev` and `main` in GitHub branch protection settings. The CI workflow also
+checks that pull requests targeting `main` come from `dev`.
 
 ## Docs
 
