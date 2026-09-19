@@ -151,6 +151,14 @@ export circuit openOffer(
   assert(pairs.member(id), "pair missing");
   const pair = pairs.lookup(id);
   assert(pair.status == PairStatus.Verified, "pair is not verified");
+
+  assert(ranges.member(pair.buyerIntentId), "buyer range missing");
+  assert(ranges.member(pair.sellerIntentId), "seller range missing");
+  const caller = ownPublicKey().bytes;
+  const isBuyer = caller == ranges.lookup(pair.buyerIntentId).owner;
+  const isSeller = caller == ranges.lookup(pair.sellerIntentId).owner;
+  assert(isBuyer || isSeller, "caller is not buyer or seller");
+
   assert(offerCommitment(offer, offerSalt) == pair.offerCommit, "offer does not open");
 
   pairs.insert(id, PairRecord {
