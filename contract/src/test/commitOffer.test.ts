@@ -48,6 +48,7 @@ describe('commitOffer', () => {
     expect(pair.status).toBe(PairStatus.Offered);
     expect(pair.fillPrice).toBe(0n);
     expect(pair.offerCommit).toHaveLength(32);
+    expect(pair.offerCommit).toEqual(sim.offerCommitment(OFFER_HIT, OFFER_SALT));
     expect(Object.keys(pair).sort()).toEqual(
       ['buyerIntentId', 'fillPrice', 'offerCommit', 'sellerIntentId', 'status'],
     );
