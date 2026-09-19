@@ -1,14 +1,14 @@
 # Intent Compact contract spec
 
-Date: 2026-09-18, revised 2026-09-20
+Date: 2026-09-18, revised 2026-09-20, amended 2026-09-20 (sections 2, 4, 5, 6, 7 to 10, 13, 14, 16)
 Hackathon: Midnight Korea 2026
-Status: agreed design, ready for Compact implementation
+Status: implemented in contract/, amended after final review
 Design source: [Discussion #10](https://github.com/sdh2222/midnight-hackathon/discussions/10), agreed 2026-09-20
 Product source: [Private Intent Execution MVP PRD](./2026-09-08-caplock-prd.md). Sections 5, 6, 8, and 10 of the PRD will be updated to match this spec once the contract interface lands.
 
 This document is the Compact contract interface. It does not implement frontend, AI parsing, agents, or HTTP APIs.
 
-Compact code is not in this change. Lock the types and call sequence here first.
+The reference implementation is contract/src/intent.compact. Where this document and the source disagree, the source governs and this document is corrected.
 
 ## 1. One sentence
 
@@ -24,6 +24,8 @@ Each side commits its own price limit, the buyer commits one offer that is prove
 - The offer is opened only after both halves passed and the trade is going to settle.
 - One range commit per wallet per item. One offer per (buyer, seller) pair. A closed pair never reopens.
 - Amounts are KRW integers (won). No division, no strings inside commitments.
+- Range and offer commitments carry a domain tag. Two commitments to the same value with the same salt never produce the same hash.
+- `openOffer` may be called only by the buyer or the seller of the pair. Holding the opening is not enough.
 
 ## 3. Changes from the Discussion #10 circuit list
 
@@ -50,11 +52,11 @@ sequenceDiagram
   BW->>C: commitOffer(buyerIntentId, sellerIntentId, buyerMax, buyerSalt, offer, offerSalt)
   Note over C: opens C_buyer, asserts offer <= buyerMax, writes pairs[pairId] = Offered
   BW->>SW: off-chain (A2A): offer, offerSalt
-  SW->>SW: check persistentCommit(offer, offerSalt) == pairs[pairId].offerCommit
+  SW->>SW: check offerCommitment(offer, offerSalt) == pairs[pairId].offerCommit
   SW->>C: verifySellerSide(pairId, sellerMin, sellerSalt, offer, offerSalt)
   Note over C: opens C_seller and C_offer, asserts offer >= sellerMin, status = Verified
   BW->>C: openOffer(pairId, offer, offerSalt)
-  Note over C: opens C_offer, fillPrice = offer, status = Opened
+  Note over C: caller is buyer or seller, opens C_offer, fillPrice = offer, status = Opened
   C-->>B: ledger: Offered, Verified, Opened
   B-->>B: fill the order at fillPrice
   alt any assert fails
@@ -95,9 +97,13 @@ String IDs never enter the contract. The client SHA-256s the UTF-8 string and pa
 Commitments:
 
 ```text
-C_range = persistentCommit<Uint<64>>(limit, salt)
-C_offer = persistentCommit<Uint<64>>(offer, offerSalt)
+C_range = persistentCommit<[Uint<8>, Uint<64>]>([1, limit], salt)
+C_offer = persistentCommit<[Uint<8>, Uint<64>]>([2, offer], offerSalt)
 ```
+
+The first tuple element is a domain tag: `1` for a range commitment, `2` for an offer commitment. Without it, a buyer who reused a salt and offered exactly `buyerMax` would publish two equal hashes, and anyone comparing `ranges[buyerIntentId].commitment` with `pairs[pairId].offerCommit` would learn `offer == buyerMax` before open. With the tag the two hashes differ even for the same value and the same salt. Salts must still be fresh random bytes per commitment; the tag is defense in depth, not a substitute.
+
+The contract exports `rangeCommitment(limit, salt)` and `offerCommitment(offer, offerSalt)` as pure circuits. Wallets and the backend compute commitments through them (`pureCircuits.rangeCommitment` in the generated module) and never reimplement the encoding. Their return value is the hash only; the inputs stay private.
 
 The public fields of an intent live in the ledger row next to the commitment, so they do not need to be inside it. A commitment can only be opened by the holder of the salt, so a copied hash is useless to anyone else.
 
@@ -129,14 +135,18 @@ export ledger ownerItems: Set<Bytes<32>>                # key persistentHash([ow
 export ledger pairs:      Map<Bytes<32>, PairRecord>    # key pairId
 ```
 
-One pure helper is also exported so the backend and tests can derive `pairId` without reimplementing the hash:
+Three pure helpers are exported so the backend, wallets, and tests never reimplement a hash:
 
 ```text
 export circuit pairIdOf(buyerIntentId: Bytes<32>, sellerIntentId: Bytes<32>): Bytes<32>
   = persistentHash<Vector<2, Bytes<32>>>([buyerIntentId, sellerIntentId])
+export circuit rangeCommitment(limit: Uint<64>, salt: Bytes<32>): Bytes<32>
+  = persistentCommit<[Uint<8>, Uint<64>]>([1, limit], salt)
+export circuit offerCommitment(offer: Uint<64>, offerSalt: Bytes<32>): Bytes<32>
+  = persistentCommit<[Uint<8>, Uint<64>]>([2, offer], offerSalt)
 ```
 
-It reads and writes nothing. The four state-changing circuits below are the contract's interface.
+They read and write nothing. The four state-changing circuits below are the contract's interface.
 
 `RangeRecord` has no limit field. `PairRecord` has no limit field and `fillPrice` is zero until open.
 
@@ -163,7 +173,7 @@ Public: the first six. Private: `limit`, `salt`.
 ```text
 ranges[intentId] = {
   owner: ownPublicKey().bytes, role, itemId, quantity, currency, version,
-  commitment: persistentCommit(limit, salt)
+  commitment: rangeCommitment(limit, salt)
 }
 ownerItems.insert(persistentHash([ownPublicKey().bytes, itemId]))
 ```
@@ -187,7 +197,7 @@ Public: the two ids. Private: the rest.
 - buyer row `role == Buyer`, seller row `role == Seller`
 - `itemId`, `quantity`, `currency` equal on both rows
 - `ownPublicKey() == buyerRow.owner`
-- `persistentCommit(buyerMax, buyerSalt) == buyerRow.commitment`
+- `rangeCommitment(buyerMax, buyerSalt) == buyerRow.commitment`
 - `offer > 0`
 - `offer <= buyerMax`
 - `pairs` has no row for `pairId` (rule: one offer per pair, a closed pair never reopens)
@@ -197,7 +207,7 @@ Public: the two ids. Private: the rest.
 ```text
 pairs[pairId] = {
   buyerIntentId, sellerIntentId,
-  offerCommit: persistentCommit(offer, offerSalt),
+  offerCommit: offerCommitment(offer, offerSalt),
   status: Offered,
   fillPrice: 0
 }
@@ -207,7 +217,7 @@ After the transaction lands, the buyer's agent sends `(offer, offerSalt)` to the
 
 ## 9. Circuit `verifySellerSide`
 
-Caller: the seller, after receiving `(offer, offerSalt)`. Before sending, the seller side should check locally that `persistentCommit(offer, offerSalt)` equals `pairs[pairId].offerCommit`. The circuit checks it again; the local check only saves a wasted transaction.
+Caller: the seller, after receiving `(offer, offerSalt)`. Before sending, the seller side should check locally that `offerCommitment(offer, offerSalt)` equals `pairs[pairId].offerCommit`. The circuit checks it again; the local check only saves a wasted transaction.
 
 **Args:** `pairId`, `sellerMin`, `sellerSalt`, `offer`, `offerSalt`
 Public: `pairId`. Private: the rest.
@@ -217,8 +227,8 @@ Public: `pairId`. Private: the rest.
 - `pairs` has a row for `pairId` and `status == Offered`
 - `sellerRow = ranges[pair.sellerIntentId]` exists
 - `ownPublicKey() == sellerRow.owner`
-- `persistentCommit(sellerMin, sellerSalt) == sellerRow.commitment`
-- `persistentCommit(offer, offerSalt) == pair.offerCommit`
+- `rangeCommitment(sellerMin, sellerSalt) == sellerRow.commitment`
+- `offerCommitment(offer, offerSalt) == pair.offerCommit`
 - `offer >= sellerMin`
 
 **Effect:** `pairs[pairId].status = Verified`
@@ -227,7 +237,7 @@ Nothing about `offer` or `sellerMin` is written. If `offer < sellerMin`, the sel
 
 ## 10. Circuit `openOffer`
 
-Caller: buyer or seller. Both hold the opening. Call when the trade is going to settle.
+Caller: the buyer or the seller of the pair. Both hold the opening. Call when the trade is going to settle. Nobody else may open the pair, even with the opening in hand.
 
 **Args:** `pairId`, `offer`, `offerSalt`
 Public: `pairId`. Private: `offer`, `offerSalt`.
@@ -235,7 +245,9 @@ Public: `pairId`. Private: `offer`, `offerSalt`.
 **Assert:**
 
 - `pairs` has a row for `pairId` and `status == Verified`
-- `persistentCommit(offer, offerSalt) == pair.offerCommit`
+- `buyerRow = ranges[pair.buyerIntentId]` and `sellerRow = ranges[pair.sellerIntentId]` exist
+- `ownPublicKey() == buyerRow.owner` or `ownPublicKey() == sellerRow.owner`
+- `offerCommitment(offer, offerSalt) == pair.offerCommit`
 
 **Effect:**
 
@@ -243,6 +255,8 @@ Public: `pairId`. Private: `offer`, `offerSalt`.
 pairs[pairId].fillPrice = disclose(offer)
 pairs[pairId].status    = Opened
 ```
+
+The caller check runs before the opening check. A third party who somehow holds `(offer, offerSalt)` is refused before the contract looks at the opening, so a leaked A2A message cannot be used to force `Opened` at a time the parties did not choose.
 
 This is the only place `disclose` touches a price. The demo may call `openOffer` right after `verifySellerSide`. The step stays separate so that in a real flow the reveal is tied to settlement, not to verification.
 
@@ -284,14 +298,16 @@ Amounts in won.
 - **Re-offer:** a second `commitOffer` for the same pair is refused on the `pairs` key check.
 - **Tamper:** `openOffer` with `950000` fails on `offerCommit`. `verifySellerSide` with a `sellerMin` that does not open `C_seller` fails on `commitment`.
 - **Privacy:** a ledger read of `ranges` and `pairs` never contains a limit, and `fillPrice` is `0` until `Opened`.
+- **Third-party open:** `openOffer` from a wallet that is neither buyer nor seller, with the correct opening, is refused on the caller check. Pair stays `Verified`, `fillPrice` stays `0`.
+- **Salt reuse:** the buyer commits `buyerMax 1000000` with salt `s`, then offers `1000000` with the same salt `s`. `ranges[buyerIntentId].commitment != pairs[pairId].offerCommit`, so the ledger does not reveal `offer == buyerMax`.
 
 ## 14. Implementation notes (next change, not this file)
 
-- Toolchain: install the `compact` developer tool, run `compact update`, and pin `pragma language_version >= <compact compile --language-version>`. Pin `@midnight-ntwrk/compact-runtime` to the exact value of `compact compile --runtime-version`. Unit tests compile with `--skip-zk`; ZK keys are only needed for deployment.
+- Toolchain: install the `compact` developer tool, run `compact update 0.34.0` (language 0.26.0, runtime 0.19.0; CI asserts both), and pin `pragma language_version >= <compact compile --language-version>`. Pin `@midnight-ntwrk/compact-runtime` to the exact value of `compact compile --runtime-version`. Unit tests compile with `--skip-zk`; ZK keys are only needed for deployment.
 - Implementation plan: [2026-09-20-intent-contract.md](../plans/2026-09-20-intent-contract.md).
 - No division, no strings, no `Opaque` inside commitments.
 - `ownPublicKey()` binds each range to the key that committed it. If wallet integration is too heavy for the demo, the user's agent key is the owner. Drop the owner check only as a last resort, and then enforce the one-commit-per-item rule in the agent.
-- Circuit arguments are private by default. Only ledger writes need `disclose`. Audit every `disclose` call: the allowed set is the public intent fields, the two intent ids, and `fillPrice` in `openOffer`.
+- Circuit arguments are private by default. Only ledger writes need `disclose`. Audit every `disclose` call: the allowed set is the public intent fields, the two intent ids, `pairId`, the return hash of the three pure helpers, and `fillPrice` in `openOffer`.
 
 ## 15. OPEN, Phase 2
 
@@ -307,6 +323,7 @@ Kept here so they are not lost. None of these are in the MVP.
 1. After approve, the user's wallet or agent calls `commitRange` with `limit` and `salt` as private inputs. The backend receives only the transaction hash and the public fields.
 2. The buyer calls `commitOffer` with `buyerMax`, `buyerSalt`, `offer`, `offerSalt` private. Then the buyer agent sends `(offer, offerSalt)` to the seller agent off-chain.
 3. The seller calls `verifySellerSide` with `sellerMin`, `sellerSalt`, `offer`, `offerSalt` private.
-4. Either side calls `openOffer` at settlement.
+4. The buyer or the seller calls `openOffer` at settlement. No other wallet can.
 5. Hash string ids with SHA-256 to `Bytes<32>` before every call. The backend keeps the mapping.
 6. The only on-chain results the UI needs are `pairs[pairId].status` and `pairs[pairId].fillPrice`.
+7. Compute every commitment with `pureCircuits.rangeCommitment` / `pureCircuits.offerCommitment` from the generated module. Never hand-roll the hash. Use a fresh 32-byte random salt for every commitment.
