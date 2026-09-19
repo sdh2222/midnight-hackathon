@@ -34,6 +34,12 @@ export type SellerArgs = {
   offerSalt: Uint8Array;
 };
 
+export type OpenArgs = {
+  pairId: Uint8Array;
+  offer: bigint;
+  offerSalt: Uint8Array;
+};
+
 // The contract declares no witnesses; every secret is a circuit argument.
 export type IntentPrivateState = Record<string, never>;
 export const witnesses = {};
@@ -92,6 +98,13 @@ export class IntentSimulator {
   async verifySellerSide(p: SellerArgs): Promise<Ledger> {
     const ctx = createCircuitContext('verifySellerSide', this.address, this.caller, this.state, this.privateState);
     const results = await this.contract.impureCircuits.verifySellerSide(ctx, p.pairId, p.sellerMin, p.sellerSalt, p.offer, p.offerSalt);
+    this.state = results.context.callContext.currentQueryContext.state;
+    return this.ledger();
+  }
+
+  async openOffer(p: OpenArgs): Promise<Ledger> {
+    const ctx = createCircuitContext('openOffer', this.address, this.caller, this.state, this.privateState);
+    const results = await this.contract.impureCircuits.openOffer(ctx, p.pairId, p.offer, p.offerSalt);
     this.state = results.context.callContext.currentQueryContext.state;
     return this.ledger();
   }
