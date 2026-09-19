@@ -67,3 +67,41 @@ export circuit commitRange(
   });
   ownerItems.insert(ownerKey);
 }
+
+export circuit commitOffer(
+  buyerIntentId: Bytes<32>,
+  sellerIntentId: Bytes<32>,
+  buyerMax: Uint<64>,
+  buyerSalt: Bytes<32>,
+  offer: Uint<64>,
+  offerSalt: Bytes<32>
+): [] {
+  const buyerId = disclose(buyerIntentId);
+  const sellerId = disclose(sellerIntentId);
+  assert(ranges.member(buyerId), "buyer range missing");
+  assert(ranges.member(sellerId), "seller range missing");
+
+  const buyer = ranges.lookup(buyerId);
+  const seller = ranges.lookup(sellerId);
+  assert(buyer.role == Role.Buyer, "buyer intent is not a buyer");
+  assert(seller.role == Role.Seller, "seller intent is not a seller");
+  assert(buyer.itemId == seller.itemId, "item mismatch");
+  assert(buyer.quantity == seller.quantity, "quantity mismatch");
+  assert(buyer.currency == seller.currency, "currency mismatch");
+  assert(ownPublicKey().bytes == buyer.owner, "caller is not the buyer");
+
+  assert(persistentCommit<Uint<64>>(buyerMax, buyerSalt) == buyer.commitment, "buyer range does not open");
+  assert(offer > 0, "offer must be positive");
+  assert(offer <= buyerMax, "offer above buyer limit");
+
+  const pairId = pairIdOf(buyerId, sellerId);
+  assert(!pairs.member(pairId), "pair already has an offer");
+
+  pairs.insert(pairId, PairRecord {
+    buyerIntentId: buyerId,
+    sellerIntentId: sellerId,
+    offerCommit: persistentCommit<Uint<64>>(offer, offerSalt),
+    status: PairStatus.Offered,
+    fillPrice: 0
+  });
+}
