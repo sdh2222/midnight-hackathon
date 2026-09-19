@@ -1,0 +1,20 @@
+{
+  "name": "@midnight-hackathon/intent-contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compact": "compact compile --skip-zk src/intent.compact src/managed/intent",
+    "compact:zk": "compact compile src/intent.compact src/managed/intent",
+    "typecheck": "npm run compact && tsc --noEmit",
+    "test": "npm run compact && vitest run"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}

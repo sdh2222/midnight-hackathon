@@ -1,0 +1,11 @@
+{
+  "name": "midnight-hackathon",
+  "private": true,
+  "workspaces": [
+    "contract"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}
