@@ -17,6 +17,15 @@ export type RangeArgs = {
   salt: Uint8Array;
 };
 
+export type OfferArgs = {
+  buyerIntentId: Uint8Array;
+  sellerIntentId: Uint8Array;
+  buyerMax: bigint;
+  buyerSalt: Uint8Array;
+  offer: bigint;
+  offerSalt: Uint8Array;
+};
+
 // The contract declares no witnesses; every secret is a circuit argument.
 export type IntentPrivateState = Record<string, never>;
 export const witnesses = {};
@@ -61,6 +70,13 @@ export class IntentSimulator {
   async commitRange(p: RangeArgs): Promise<Ledger> {
     const ctx = createCircuitContext('commitRange', this.address, this.caller, this.state, this.privateState);
     const results = await this.contract.impureCircuits.commitRange(ctx, p.intentId, p.role, p.itemId, p.quantity, p.currency, p.version, p.limit, p.salt);
+    this.state = results.context.callContext.currentQueryContext.state;
+    return this.ledger();
+  }
+
+  async commitOffer(p: OfferArgs): Promise<Ledger> {
+    const ctx = createCircuitContext('commitOffer', this.address, this.caller, this.state, this.privateState);
+    const results = await this.contract.impureCircuits.commitOffer(ctx, p.buyerIntentId, p.sellerIntentId, p.buyerMax, p.buyerSalt, p.offer, p.offerSalt);
     this.state = results.context.callContext.currentQueryContext.state;
     return this.ledger();
   }
