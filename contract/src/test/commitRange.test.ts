@@ -43,6 +43,7 @@ describe('commitRange', () => {
 
     expect(l.ranges.size()).toBe(2n);
     expect(l.ranges.lookup(SELLER_INTENT).role).toBe(Role.Seller);
+    expect(l.ranges.lookup(SELLER_INTENT).owner).toEqual(hexToBytes(SELLER_KEY));
     expect(l.ownerItems.size()).toBe(2n);
   });
 

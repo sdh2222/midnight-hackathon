@@ -118,6 +118,7 @@ export circuit verifySellerSide(
   const pair = pairs.lookup(id);
   assert(pair.status == PairStatus.Offered, "pair is not in Offered state");
 
+  assert(ranges.member(pair.sellerIntentId), "seller range missing");
   const seller = ranges.lookup(pair.sellerIntentId);
   assert(ownPublicKey().bytes == seller.owner, "caller is not the seller");
   assert(persistentCommit<Uint<64>>(sellerMin, sellerSalt) == seller.commitment, "seller range does not open");

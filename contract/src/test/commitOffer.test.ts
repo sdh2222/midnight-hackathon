@@ -95,6 +95,25 @@ describe('commitOffer', () => {
       .rejects.toThrow(/item mismatch/);
   });
 
+  it('rejects when quantities differ', async () => {
+    const sim = await IntentSimulator.create(BUYER_KEY);
+    await sim.commitRange({ ...buyerRange, limit: BUYER_MAX, salt: BUYER_SALT });
+    await sim.as(SELLER_KEY).commitRange({ ...sellerRange, quantity: 2n, limit: SELLER_MIN, salt: SELLER_SALT });
+    await expect(sim.as(BUYER_KEY).commitOffer(offer)).rejects.toThrow(/quantity mismatch/);
+  });
+
+  it('rejects when the seller intent is not a seller', async () => {
+    const sim = await setup();
+    await sim.as(OTHER_KEY).commitRange({
+      ...buyerRange,
+      intentId: OTHER_INTENT,
+      limit: BUYER_MAX,
+      salt: BUYER_SALT,
+    });
+    await expect(sim.as(BUYER_KEY).commitOffer({ ...offer, sellerIntentId: OTHER_INTENT }))
+      .rejects.toThrow(/seller intent is not a seller/);
+  });
+
   it('rejects a caller that does not own the buyer intent', async () => {
     const sim = await setup();
     await expect(sim.as(OTHER_KEY).commitOffer(offer)).rejects.toThrow(/caller is not the buyer/);
