@@ -53,6 +53,12 @@ describe('commitRange', () => {
     expect(a.ranges.lookup(BUYER_INTENT).commitment).not.toEqual(b.ranges.lookup(BUYER_INTENT).commitment);
   });
 
+  it('stores exactly rangeCommitment(limit, salt)', async () => {
+    const sim = await IntentSimulator.create(BUYER_KEY);
+    const l = await sim.commitRange({ ...buyerRange, limit: BUYER_MAX, salt: BUYER_SALT });
+    expect(l.ranges.lookup(BUYER_INTENT).commitment).toEqual(sim.rangeCommitment(BUYER_MAX, BUYER_SALT));
+  });
+
   it('rejects quantity 0', async () => {
     const sim = await IntentSimulator.create(BUYER_KEY);
     await expect(sim.commitRange({ ...buyerRange, quantity: 0n, limit: BUYER_MAX, salt: BUYER_SALT }))
