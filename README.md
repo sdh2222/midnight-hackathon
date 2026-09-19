@@ -41,9 +41,9 @@ checks that pull requests targeting `main` come from `dev`.
 The Compact contract lives in `contract/`. Spec: `docs/superpowers/specs/2026-09-18-intent-compact.md`.
 
 ```bash
-# once: Compact developer tool, then the latest toolchain
+# once: Compact developer tool, then the toolchain this contract is pinned to (language 0.26.0, runtime 0.19.0)
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
-compact update
+compact update 0.34.0
 
 npm install
 npm test            # compiles with --skip-zk and runs the simulator tests
