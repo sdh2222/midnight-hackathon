@@ -105,3 +105,30 @@ export circuit commitOffer(
     fillPrice: 0
   });
 }
+
+export circuit verifySellerSide(
+  pairId: Bytes<32>,
+  sellerMin: Uint<64>,
+  sellerSalt: Bytes<32>,
+  offer: Uint<64>,
+  offerSalt: Bytes<32>
+): [] {
+  const id = disclose(pairId);
+  assert(pairs.member(id), "pair missing");
+  const pair = pairs.lookup(id);
+  assert(pair.status == PairStatus.Offered, "pair is not in Offered state");
+
+  const seller = ranges.lookup(pair.sellerIntentId);
+  assert(ownPublicKey().bytes == seller.owner, "caller is not the seller");
+  assert(persistentCommit<Uint<64>>(sellerMin, sellerSalt) == seller.commitment, "seller range does not open");
+  assert(persistentCommit<Uint<64>>(offer, offerSalt) == pair.offerCommit, "offer does not open");
+  assert(offer >= sellerMin, "offer below seller limit");
+
+  pairs.insert(id, PairRecord {
+    buyerIntentId: pair.buyerIntentId,
+    sellerIntentId: pair.sellerIntentId,
+    offerCommit: pair.offerCommit,
+    status: PairStatus.Verified,
+    fillPrice: 0
+  });
+}
