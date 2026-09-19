@@ -4,7 +4,18 @@ import {
   createConstructorContext,
   sampleContractAddress,
 } from '@midnight-ntwrk/compact-runtime';
-import { Contract, type Ledger, ledger, pureCircuits } from '../managed/intent/contract/index.js';
+import { Contract, type Currency, type Ledger, type Role, ledger, pureCircuits } from '../managed/intent/contract/index.js';
+
+export type RangeArgs = {
+  intentId: Uint8Array;
+  role: Role;
+  itemId: Uint8Array;
+  quantity: bigint;
+  currency: Currency;
+  version: bigint;
+  limit: bigint;
+  salt: Uint8Array;
+};
 
 // The contract declares no witnesses; every secret is a circuit argument.
 export type IntentPrivateState = Record<string, never>;
@@ -45,5 +56,12 @@ export class IntentSimulator {
 
   pairIdOf(buyerIntentId: Uint8Array, sellerIntentId: Uint8Array): Uint8Array {
     return pureCircuits.pairIdOf(buyerIntentId, sellerIntentId);
+  }
+
+  async commitRange(p: RangeArgs): Promise<Ledger> {
+    const ctx = createCircuitContext('commitRange', this.address, this.caller, this.state, this.privateState);
+    const results = await this.contract.impureCircuits.commitRange(ctx, p.intentId, p.role, p.itemId, p.quantity, p.currency, p.version, p.limit, p.salt);
+    this.state = results.context.callContext.currentQueryContext.state;
+    return this.ledger();
   }
 }

@@ -31,3 +31,39 @@ export ledger pairs: Map<Bytes<32>, PairRecord>;
 export circuit pairIdOf(buyerIntentId: Bytes<32>, sellerIntentId: Bytes<32>): Bytes<32> {
   return disclose(persistentHash<Vector<2, Bytes<32>>>([buyerIntentId, sellerIntentId]));
 }
+
+circuit ownerItemKey(owner: Bytes<32>, itemId: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([owner, itemId]);
+}
+
+export circuit commitRange(
+  intentId: Bytes<32>,
+  role: Role,
+  itemId: Bytes<32>,
+  quantity: Uint<32>,
+  currency: Currency,
+  version: Uint<32>,
+  limit: Uint<64>,
+  salt: Bytes<32>
+): [] {
+  assert(quantity > 0, "quantity must be positive");
+  assert(limit > 0, "limit must be positive");
+
+  const id = disclose(intentId);
+  assert(!ranges.member(id), "intent already committed");
+
+  const owner = ownPublicKey().bytes;
+  const ownerKey = disclose(ownerItemKey(owner, itemId));
+  assert(!ownerItems.member(ownerKey), "owner already has a range for this item");
+
+  ranges.insert(id, RangeRecord {
+    owner: disclose(owner),
+    role: disclose(role),
+    itemId: disclose(itemId),
+    quantity: disclose(quantity),
+    currency: disclose(currency),
+    version: disclose(version),
+    commitment: persistentCommit<Uint<64>>(limit, salt)
+  });
+  ownerItems.insert(ownerKey);
+}
