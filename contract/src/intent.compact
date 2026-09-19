@@ -132,3 +132,23 @@ export circuit verifySellerSide(
     fillPrice: 0
   });
 }
+
+export circuit openOffer(
+  pairId: Bytes<32>,
+  offer: Uint<64>,
+  offerSalt: Bytes<32>
+): [] {
+  const id = disclose(pairId);
+  assert(pairs.member(id), "pair missing");
+  const pair = pairs.lookup(id);
+  assert(pair.status == PairStatus.Verified, "pair is not verified");
+  assert(persistentCommit<Uint<64>>(offer, offerSalt) == pair.offerCommit, "offer does not open");
+
+  pairs.insert(id, PairRecord {
+    buyerIntentId: pair.buyerIntentId,
+    sellerIntentId: pair.sellerIntentId,
+    offerCommit: pair.offerCommit,
+    status: PairStatus.Opened,
+    fillPrice: disclose(offer)
+  });
+}
