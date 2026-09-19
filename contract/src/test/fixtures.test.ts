@@ -11,6 +11,7 @@ import {
   OFFER_LOW,
   OFFER_SALT,
   OFFER_TOO_HIGH,
+  OTHER_KEY,
   SELLER_INTENT,
   SELLER_KEY,
   SELLER_MIN,
@@ -132,5 +133,27 @@ describe('spec section 13 fixtures', () => {
     expect(afterOpen).toContain(OFFER_HIT.toString());
     expect(afterOpen).not.toContain(BUYER_MAX.toString());
     expect(afterOpen).not.toContain(SELLER_MIN.toString());
+  });
+
+  it('Third-party open: a wallet that is neither buyer nor seller cannot open a Verified pair', async () => {
+    const sim = await withRanges(BUYER_MAX);
+    await sim.commitOffer(buyerOffer(OFFER_HIT));
+    const pairId = sim.pairIdOf(BUYER_INTENT, SELLER_INTENT);
+    await sim.as(SELLER_KEY).verifySellerSide(sellerProof(pairId, OFFER_HIT));
+
+    await expect(sim.as(OTHER_KEY).openOffer({ pairId, offer: OFFER_HIT, offerSalt: OFFER_SALT }))
+      .rejects.toThrow(/caller is not buyer or seller/);
+    const pair = sim.ledger().pairs.lookup(pairId);
+    expect(pair.status).toBe(PairStatus.Verified);
+    expect(pair.fillPrice).toBe(0n);
+  });
+
+  it('Salt reuse: the same value and salt give different range and offer commitments', async () => {
+    const sim = await withRanges(BUYER_MAX);
+    await sim.commitOffer({ ...buyerOffer(BUYER_MAX), offerSalt: BUYER_SALT });
+    const pairId = sim.pairIdOf(BUYER_INTENT, SELLER_INTENT);
+
+    const l = sim.ledger();
+    expect(l.ranges.lookup(BUYER_INTENT).commitment).not.toEqual(l.pairs.lookup(pairId).offerCommit);
   });
 });

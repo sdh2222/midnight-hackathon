@@ -8,6 +8,7 @@ import {
   BUYER_SALT,
   OFFER_HIT,
   OFFER_SALT,
+  OTHER_KEY,
   SELLER_INTENT,
   SELLER_KEY,
   SELLER_MIN,
@@ -58,6 +59,15 @@ describe('openOffer', () => {
     const { sim, pairId } = await verified();
     const l = await sim.as(SELLER_KEY).openOffer({ pairId, offer: OFFER_HIT, offerSalt: OFFER_SALT });
     expect(l.pairs.lookup(pairId).fillPrice).toBe(OFFER_HIT);
+  });
+
+  it('rejects a third party even with the correct opening', async () => {
+    const { sim, pairId } = await verified();
+    await expect(sim.as(OTHER_KEY).openOffer({ pairId, offer: OFFER_HIT, offerSalt: OFFER_SALT }))
+      .rejects.toThrow(/caller is not buyer or seller/);
+    const pair = sim.ledger().pairs.lookup(pairId);
+    expect(pair.status).toBe(PairStatus.Verified);
+    expect(pair.fillPrice).toBe(0n);
   });
 
   it('rejects an unknown pair', async () => {
