@@ -1,0 +1,33 @@
+pragma language_version >= 0.26.0;
+
+import CompactStandardLibrary;
+
+export enum Role { Buyer, Seller }
+export enum Currency { KRW }
+export enum PairStatus { Offered, Verified, Opened }
+
+export struct RangeRecord {
+  owner: Bytes<32>;
+  role: Role;
+  itemId: Bytes<32>;
+  quantity: Uint<32>;
+  currency: Currency;
+  version: Uint<32>;
+  commitment: Bytes<32>;
+}
+
+export struct PairRecord {
+  buyerIntentId: Bytes<32>;
+  sellerIntentId: Bytes<32>;
+  offerCommit: Bytes<32>;
+  status: PairStatus;
+  fillPrice: Uint<64>;
+}
+
+export ledger ranges: Map<Bytes<32>, RangeRecord>;
+export ledger ownerItems: Set<Bytes<32>>;
+export ledger pairs: Map<Bytes<32>, PairRecord>;
+
+export circuit pairIdOf(buyerIntentId: Bytes<32>, sellerIntentId: Bytes<32>): Bytes<32> {
+  return disclose(persistentHash<Vector<2, Bytes<32>>>([buyerIntentId, sellerIntentId]));
+}
