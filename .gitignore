@@ -25,6 +25,7 @@ zkir/
 .mn-app/
 proof-server.log
 accounts.json
+managed/
 
 # Node / build
 dist/

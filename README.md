@@ -36,6 +36,21 @@ Repository administrators should require pull requests and passing CI for both
 `dev` and `main` in GitHub branch protection settings. The CI workflow also
 checks that pull requests targeting `main` come from `dev`.
 
+## Contract
+
+The Compact contract lives in `contract/`. Spec: `docs/superpowers/specs/2026-09-18-intent-compact.md`.
+
+```bash
+# once: Compact developer tool, then the toolchain this contract is pinned to (language 0.26.0, runtime 0.19.0)
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
+compact update 0.34.0
+
+npm install
+npm test            # compiles with --skip-zk and runs the simulator tests
+```
+
+`contract/src/managed/` is generated and gitignored. Run `npm run compact:zk --workspace contract` only when you need proving keys for a deployment.
+
 ## Docs
 
 - [Midnight Korea docs](https://docs.midnightkorea.org/)
