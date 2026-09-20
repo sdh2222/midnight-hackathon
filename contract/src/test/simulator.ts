@@ -81,6 +81,14 @@ export class IntentSimulator {
     return pureCircuits.pairIdOf(buyerIntentId, sellerIntentId);
   }
 
+  rangeCommitment(limit: bigint, salt: Uint8Array): Uint8Array {
+    return pureCircuits.rangeCommitment(limit, salt);
+  }
+
+  offerCommitment(offer: bigint, offerSalt: Uint8Array): Uint8Array {
+    return pureCircuits.offerCommitment(offer, offerSalt);
+  }
+
   async commitRange(p: RangeArgs): Promise<Ledger> {
     const ctx = createCircuitContext('commitRange', this.address, this.caller, this.state, this.privateState);
     const results = await this.contract.impureCircuits.commitRange(ctx, p.intentId, p.role, p.itemId, p.quantity, p.currency, p.version, p.limit, p.salt);
