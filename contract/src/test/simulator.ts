@@ -18,6 +18,18 @@ export type RangeArgs = {
   salt: Uint8Array;
 };
 
+export type VerifyArgs = {
+  intentId: Uint8Array;
+  priceMax: bigint;
+  sourceId: Uint8Array;
+  dateMax: bigint;
+  salt: Uint8Array;
+  offerPrice: bigint;
+  offerSource: Uint8Array;
+  offerDate: bigint;
+  offerSalt: Uint8Array;
+};
+
 export type IntentPrivateState = Record<string, never>;
 export const witnesses = {};
 
@@ -65,6 +77,24 @@ export class IntentSimulator {
     const ctx = createCircuitContext('commitRange', this.address, this.caller, this.state, this.privateState);
     const results = await this.contract.impureCircuits.commitRange(
       ctx, p.intentId, p.itemId, p.quantity, p.currency, p.version, p.priceMax, p.sourceId, p.dateMax, p.salt,
+    );
+    this.state = results.context.callContext.currentQueryContext.state;
+    return this.ledger();
+  }
+
+  async commitVerify(p: VerifyArgs): Promise<Ledger> {
+    const ctx = createCircuitContext('commitVerify', this.address, this.caller, this.state, this.privateState);
+    const results = await this.contract.impureCircuits.commitVerify(
+      ctx,
+      p.intentId,
+      p.priceMax,
+      p.sourceId,
+      p.dateMax,
+      p.salt,
+      p.offerPrice,
+      p.offerSource,
+      p.offerDate,
+      p.offerSalt,
     );
     this.state = results.context.callContext.currentQueryContext.state;
     return this.ledger();

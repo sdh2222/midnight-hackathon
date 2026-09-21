@@ -82,3 +82,37 @@ export circuit commitRange(
   });
   ownerItems.insert(ownerKey);
 }
+
+export circuit commitVerify(
+  intentId: Bytes<32>,
+  priceMax: Uint<64>,
+  sourceId: Bytes<32>,
+  dateMax: Uint<32>,
+  salt: Bytes<32>,
+  offerPrice: Uint<64>,
+  offerSource: Bytes<32>,
+  offerDate: Uint<32>,
+  offerSalt: Bytes<32>
+): [] {
+  const id = disclose(intentId);
+  assert(ranges.member(id), "range missing");
+
+  const row = ranges.lookup(id);
+  assert(ownPublicKey().bytes == row.owner, "caller is not the owner");
+  assert(
+    rangeCommitment(priceMax, sourceId, dateMax, salt) == row.commitment,
+    "range does not open"
+  );
+  assert(offerPrice > 0, "offer must be positive");
+  assert(offerPrice <= priceMax, "offer above buyer limit");
+
+  const unconstrainedSource = default<Bytes<32>>;
+  assert(sourceId == unconstrainedSource || offerSource == sourceId, "source mismatch");
+  assert(dateMax == 0 || offerDate <= dateMax, "date after buyer max");
+  assert(!offers.member(id), "intent already verified");
+
+  offers.insert(id, OfferRecord {
+    offerCommit: offerCommitment(offerPrice, offerSource, offerDate, offerSalt),
+    status: OfferStatus.Verified
+  });
+}
