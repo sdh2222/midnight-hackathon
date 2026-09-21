@@ -38,7 +38,9 @@ checks that pull requests targeting `main` come from `dev`.
 
 ## Contract
 
-The Compact contract lives in `contract/`. Spec: `docs/superpowers/specs/2026-09-18-intent-compact.md`.
+The Compact contract lives in `contract/`. Spec: `docs/superpowers/specs/2026-09-18-intent-compact.md`. Architecture: `docs/superpowers/specs/2026-09-21-marketplace-local-verify.md`.
+
+Two impure circuits: `commitRange` locks `C = hash(tag 1, priceMax, sourceId, dateMax, salt)`. `commitVerify` re-hashes that preimage, checks the marketplace offer fits, and writes `C_offer`. Zero `sourceId` or `dateMax` means unconstrained at verify; those zeros are still inside `C`.
 
 ```bash
 # once: Compact developer tool, then the toolchain this contract is pinned to (language 0.26.0, runtime 0.19.0)
