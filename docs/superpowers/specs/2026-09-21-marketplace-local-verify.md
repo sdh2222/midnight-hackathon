@@ -7,9 +7,9 @@ Our role: Compact contract only
 Working sketch (teammate-facing terms): `docs/superpowers/diagrams/intent_01_hash-and-prove.excalidraw`
 Contract figure (same actors and 1-6 labels as 01): `docs/superpowers/diagrams/intent_02_t0-search-verify.png`
 
-T0 / T1 / T2 in this document are architecture-time labels only. Figures use the 01 words: `commitRange`, `offer/deal`, `open + compare`, `Verified`.
+T0 / T1 / T2 in this document are architecture-time labels only. Figures use the 01 words: `commitRange`, `offer/deal`, `commitVerify`, `Verified`.
 
-This document replaces the A2A “agent matches another agent” assumption in `docs/superpowers/specs/2026-09-18-intent-compact.md` (Discussion #10, branch `docs/intent-compact-spec`). That spec and `contract/src/intent.compact` stay as the implemented 1v1 buyer/seller pair. They are not deleted. The next Compact change is an amend of that interface, listed in section 8. Parent Acceptance rows from 2026-09-18 stay listed until a human amends that spec in the same change set as the code.
+The Compact interface is [2026-09-18-intent-compact.md](./2026-09-18-intent-compact.md), amended 2026-09-21 to this flow. `contract/src/intent.compact` is the reference implementation. Phase 2 rows from the 2026-09-18 table stay listed OPEN in that spec.
 
 ## 1. One sentence
 
@@ -61,14 +61,14 @@ sequenceDiagram
 
   U->>P: 0. intent (public + private)
   P->>V: private JSON + salt
-  V->>C: T0 commitCriteria(public ids, private, salt)
+  V->>C: T0 commitRange(public ids, private, salt)
   Note over C: ranges[intentId].commitment = C
   P->>A: public requirement JSON
   A->>M: search
   M->>A: deals / offers
   A->>V: offer list as JSON (A1, A2, ...)
-  V->>C: T2 verifyMarketplaceOffer(intentId, T0 private, salt, A1, offerSalt)
-  Note over C: open C, assert A1 fits, write C_offer
+  V->>C: T2 commitVerify(intentId, T0 private, salt, A1, offerSalt)
+  Note over C: re-hash == C, assert A1 fits, write C_offer
   alt A1 fails an assert
     C-->>V: tx rejected, C unchanged
     V->>C: try A2
@@ -79,7 +79,7 @@ sequenceDiagram
 
 ### T0 — lock
 
-Local verifier calls `commitCriteria`. Ledger stores one `C` for this wallet and item.
+Local verifier calls `commitRange`. Ledger stores one `C` for this wallet and item.
 
 ```
 C = persistentCommit([1, priceMax, sourceId, dateMax], salt)
@@ -97,8 +97,8 @@ Local verifier loads the T0 preimage from local storage (not from the agent) and
 
 One transaction proves:
 
-1. `criteriaCommitment(priceMax, sourceId, dateMax, salt) == C` already on the ledger
-2. A1 satisfies those opened fields (price, source, date)
+1. `rangeCommitment(priceMax, sourceId, dateMax, salt) == C` already on the ledger
+2. A1 satisfies those fields (price, source, date; zero source/date means unconstrained)
 3. `C_offer = offerCommitment(A1, offerSalt)` is written
 
 Fail: assert, revert, ledger unchanged, try the next offer. Success: this intent is bound to A1.
@@ -115,61 +115,47 @@ The agent does not need `C` to search. T0 is not for the LLM. It is so T2 must r
 
 | Ledger | Meaning |
 |---|---|
-| `criteria[intentId].commitment = C` | T0 lock exists |
+| `ranges[intentId].commitment = C` | T0 lock exists |
 | no offer row | Search may still be running |
-| `offers[offerId].status = Bound` + `C_offer` | A1 fitted and is locked to `C` |
+| `offers[intentId].status = Verified` + `C_offer` | A1 fitted and is bound to `C` |
 | tx rejected | That offer did not fit. No row. `C` stays |
 
 `Opened` / public `fillPrice` is optional for the demo. If the 발주서 only needs a Midnight tx hash of `Bound`, do not disclose the price. If the stamp must show the filled price, add `openOffer` later and `disclose` only then.
 
-## 8. Compact amend (our work)
+## 8. Compact interface
 
-Implemented today (`intent.compact`): `commitRange`, `commitOffer`, `verifySellerSide`, `openOffer` on a buyer/seller pair. `commitOffer` requires a seller `commitRange` row.
-
-Required for this architecture:
+See [2026-09-18-intent-compact.md](./2026-09-18-intent-compact.md). Circuit names match the figures:
 
 | Circuit | When | Private inputs | Effect |
 |---|---|---|---|
-| `criteriaCommitment` (pure) | helper | `priceMax`, `sourceId`, `dateMax`, `salt` | domain-tagged commit, tag `1` |
+| `rangeCommitment` (pure) | helper | `priceMax`, `sourceId`, `dateMax`, `salt` | domain-tagged commit, tag `1` |
 | `offerCommitment` (pure) | helper | offer fields, `offerSalt` | domain-tagged commit, tag `2` |
-| `commitCriteria` | T0 | criteria + salt | insert `C`; one lock per wallet per item |
-| `verifyMarketplaceOffer` | T2 | T0 criteria + salt + A1 + `offerSalt` | open `C`, assert fit, insert `C_offer` |
+| `commitRange` | T0 | criteria + salt | insert `C`; one lock per wallet per item |
+| `commitVerify` | T2 | T0 criteria + salt + A1 + `offerSalt` | re-hash == `C`, assert fit, insert `C_offer` |
 
-Dropped for this product (keep in the old spec as OPEN / not this flow):
+Zero `sourceId` or `dateMax` means unconstrained at verify. Those zeros stay inside `C`.
 
-- Seller `commitRange`
-- `verifySellerSide`
-- `pairIdOf(buyerIntentId, sellerIntentId)` as the offer key
-- Agent-to-agent offer salt exchange
-
-Still required from the old spec unless a human amends it: domain tags so range/criteria hashes and offer hashes cannot collide; caller of any later `openOffer` must be the owner of the T0 row.
-
-Encoding (must be fixed before we implement):
-
-- `priceMax` / offer price: `Uint<64>` KRW integers, same as now
-- `sourceId`: `Bytes<32>` (SHA-256 of a normalized source string, mapping off-chain)
-- `dateMax` / offer date: `Uint<32>` unix day or unix seconds, one choice, no strings in the commit
-- `salt` / `offerSalt`: fresh `Bytes<32>` each commitment
+Encoding: `priceMax` / offer price `Uint<64>` KRW; `sourceId` `Bytes<32>`; `dateMax` / offer date `Uint<32>` unix day; salts `Bytes<32>`.
 
 ## 9. What we do not build
 
 - Local intent → JSON parser (cheap local model)
 - Search agent, Qwen MCP, Alibaba API
 - Backend timeout / 발주서 PDF
-- Deposit, on-chain release, band discovery (still Phase 2 from 2026-09-18 §15)
+- Deposit, on-chain release, band discovery (still Phase 2 from 2026-09-18 §13)
 
 ## 10. Handoff
 
-1. After the user approves the split JSON, the local verifier calls `commitCriteria`. Backend gets the tx hash and public fields only.
+1. After the user approves the split JSON, the local verifier calls `commitRange`. Backend gets the tx hash and the public fields only.
 2. Search agent receives public JSON only. It returns an offer list as JSON.
-3. Local verifier picks A1 (or tries in order), calls `verifyMarketplaceOffer` with T0 secrets from local storage.
+3. Local verifier picks A1 (or tries in order), calls `commitVerify` with T0 secrets from local storage.
 4. Hash string ids with SHA-256 to `Bytes<32>` before every call. Backend keeps the mapping.
 5. Compute commitments with the generated `pureCircuits`, never by hand.
-6. UI reads `Bound` (and `fillPrice` only if `openOffer` exists).
+6. UI reads `offers[intentId].status`.
 
 ## 11. OPEN
 
 - Exact offer JSON schema from the marketplace agent
-- Whether several fitted offers may exist for one `intentId`, or the first success binds and further verifies revert
-- Whether `Opened` / public fill price is in the demo
-- Seller-side Midnight wallet if a counterparty later joins (old 4-circuit flow)
+- First success binds one `intentId` (this amend). Several simultaneous fitted offers would need a new key.
+- Whether `Opened` / public fill price is in a later demo (Phase 2 in 2026-09-18 §13)
+- Seller-side Midnight wallet if a counterparty later joins (Phase 2 A2A pair)
