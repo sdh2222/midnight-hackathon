@@ -4,43 +4,32 @@ import {
   createConstructorContext,
   sampleContractAddress,
 } from '@midnight-ntwrk/compact-runtime';
-import { Contract, type Currency, type Ledger, type Role, ledger, pureCircuits } from '../managed/intent/contract/index.js';
+import { Contract, type Currency, type Ledger, ledger, pureCircuits } from '../managed/intent/contract/index.js';
 
 export type RangeArgs = {
   intentId: Uint8Array;
-  role: Role;
   itemId: Uint8Array;
   quantity: bigint;
   currency: Currency;
   version: bigint;
-  limit: bigint;
+  priceMax: bigint;
+  sourceId: Uint8Array;
+  dateMax: bigint;
   salt: Uint8Array;
 };
 
-export type OfferArgs = {
-  buyerIntentId: Uint8Array;
-  sellerIntentId: Uint8Array;
-  buyerMax: bigint;
-  buyerSalt: Uint8Array;
-  offer: bigint;
+export type VerifyArgs = {
+  intentId: Uint8Array;
+  priceMax: bigint;
+  sourceId: Uint8Array;
+  dateMax: bigint;
+  salt: Uint8Array;
+  offerPrice: bigint;
+  offerSource: Uint8Array;
+  offerDate: bigint;
   offerSalt: Uint8Array;
 };
 
-export type SellerArgs = {
-  pairId: Uint8Array;
-  sellerMin: bigint;
-  sellerSalt: Uint8Array;
-  offer: bigint;
-  offerSalt: Uint8Array;
-};
-
-export type OpenArgs = {
-  pairId: Uint8Array;
-  offer: bigint;
-  offerSalt: Uint8Array;
-};
-
-// The contract declares no witnesses; every secret is a circuit argument.
 export type IntentPrivateState = Record<string, never>;
 export const witnesses = {};
 
@@ -67,7 +56,6 @@ export class IntentSimulator {
     );
   }
 
-  // Each circuit call builds a fresh context from this.caller, so ownPublicKey() follows the last as().
   as(caller: string): this {
     this.caller = caller;
     return this;
@@ -77,42 +65,37 @@ export class IntentSimulator {
     return ledger(this.state);
   }
 
-  pairIdOf(buyerIntentId: Uint8Array, sellerIntentId: Uint8Array): Uint8Array {
-    return pureCircuits.pairIdOf(buyerIntentId, sellerIntentId);
+  rangeCommitment(priceMax: bigint, sourceId: Uint8Array, dateMax: bigint, salt: Uint8Array): Uint8Array {
+    return pureCircuits.rangeCommitment(priceMax, sourceId, dateMax, salt);
   }
 
-  rangeCommitment(limit: bigint, salt: Uint8Array): Uint8Array {
-    return pureCircuits.rangeCommitment(limit, salt);
-  }
-
-  offerCommitment(offer: bigint, offerSalt: Uint8Array): Uint8Array {
-    return pureCircuits.offerCommitment(offer, offerSalt);
+  offerCommitment(offerPrice: bigint, offerSource: Uint8Array, offerDate: bigint, offerSalt: Uint8Array): Uint8Array {
+    return pureCircuits.offerCommitment(offerPrice, offerSource, offerDate, offerSalt);
   }
 
   async commitRange(p: RangeArgs): Promise<Ledger> {
     const ctx = createCircuitContext('commitRange', this.address, this.caller, this.state, this.privateState);
-    const results = await this.contract.impureCircuits.commitRange(ctx, p.intentId, p.role, p.itemId, p.quantity, p.currency, p.version, p.limit, p.salt);
+    const results = await this.contract.impureCircuits.commitRange(
+      ctx, p.intentId, p.itemId, p.quantity, p.currency, p.version, p.priceMax, p.sourceId, p.dateMax, p.salt,
+    );
     this.state = results.context.callContext.currentQueryContext.state;
     return this.ledger();
   }
 
-  async commitOffer(p: OfferArgs): Promise<Ledger> {
-    const ctx = createCircuitContext('commitOffer', this.address, this.caller, this.state, this.privateState);
-    const results = await this.contract.impureCircuits.commitOffer(ctx, p.buyerIntentId, p.sellerIntentId, p.buyerMax, p.buyerSalt, p.offer, p.offerSalt);
-    this.state = results.context.callContext.currentQueryContext.state;
-    return this.ledger();
-  }
-
-  async verifySellerSide(p: SellerArgs): Promise<Ledger> {
-    const ctx = createCircuitContext('verifySellerSide', this.address, this.caller, this.state, this.privateState);
-    const results = await this.contract.impureCircuits.verifySellerSide(ctx, p.pairId, p.sellerMin, p.sellerSalt, p.offer, p.offerSalt);
-    this.state = results.context.callContext.currentQueryContext.state;
-    return this.ledger();
-  }
-
-  async openOffer(p: OpenArgs): Promise<Ledger> {
-    const ctx = createCircuitContext('openOffer', this.address, this.caller, this.state, this.privateState);
-    const results = await this.contract.impureCircuits.openOffer(ctx, p.pairId, p.offer, p.offerSalt);
+  async commitVerify(p: VerifyArgs): Promise<Ledger> {
+    const ctx = createCircuitContext('commitVerify', this.address, this.caller, this.state, this.privateState);
+    const results = await this.contract.impureCircuits.commitVerify(
+      ctx,
+      p.intentId,
+      p.priceMax,
+      p.sourceId,
+      p.dateMax,
+      p.salt,
+      p.offerPrice,
+      p.offerSource,
+      p.offerDate,
+      p.offerSalt,
+    );
     this.state = results.context.callContext.currentQueryContext.state;
     return this.ledger();
   }
