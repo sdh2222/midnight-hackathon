@@ -2,9 +2,14 @@
   "name": "midnight-hackathon",
   "private": true,
   "workspaces": [
+    "apps/*",
+    "packages/*",
     "contract"
   ],
   "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev:api": "npm run dev --workspace @midnight-hackathon/api",
+    "dev:web": "npm run dev --workspace @midnight-hackathon/web",
     "test": "npm test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   }
