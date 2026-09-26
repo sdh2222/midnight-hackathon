@@ -10,6 +10,10 @@ private procurement workspace입니다.
 - `contract`: `commitRange`와 `commitVerify` Compact 컨트랙트
 - `packages/shared`: 요청, 견적, 검색 결과의 공통 스키마
 
+승인된 거래는 기본적으로 `apps/api/data/executions.json`에 저장되며 이 경로는
+Git에서 제외됩니다. 저장 레코드는 공개 견적과 체인 트랜잭션만 포함하고, 최대 예산과
+salt 및 원본 지갑 주소는 포함하지 않습니다.
+
 ## 로컬 실행
 
 Node.js 22+, Docker Desktop, WSL2가 필요합니다.

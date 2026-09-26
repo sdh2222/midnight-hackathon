@@ -42,6 +42,7 @@ out/
 *.tmp
 tmp/
 .cache/
+apps/api/data/
 
 # IDE
 .idea/

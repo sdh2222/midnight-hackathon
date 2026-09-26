@@ -33,3 +33,16 @@ Pipeline:
 `JEV_PROVIDER=mock` keeps all tests and offline demos deterministic. The real provider validates typed Jev responses, retries rate-limit/overload and transport failures, times out requests, and sends only the public requirement plus public offer fields.
 
 The `CatalogProvider` and `JevProvider` interfaces remain the swap points for integrations.
+
+## Execution history
+
+After `commitVerify`, the web app stores the approved public offer through:
+
+- `POST /v1/executions`
+- `GET /v1/executions?accountIdHash=<sha256-wallet-id>`
+- `GET /v1/executions/:executionId?accountIdHash=<sha256-wallet-id>`
+
+The API persists records to `apps/api/data/executions.json` by default. The directory is
+gitignored and can be overridden with `EXECUTION_STORE_PATH`. Records contain the public
+requirement, selected offer, status, snapshot hash, and Midnight transaction IDs. Raw wallet
+addresses, private budgets, and salts are rejected by the strict schema and are never stored.

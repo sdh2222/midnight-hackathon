@@ -2,9 +2,12 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   PublicRequirementSchema,
   offerSnapshotHash,
+  sha256Hex,
+  type ExecutionHistoryRecord,
   type RankedOffer,
   type SearchResponse,
 } from "@midnight-hackathon/shared";
+import { createExecutionHistory, listExecutionHistory } from "./api/executions";
 import { buildSearchRequest, searchOffers } from "./api/search";
 import {
   createProcurementContractWorkflow,
@@ -23,7 +26,7 @@ import {
   SparkIcon,
 } from "./components/Icons";
 
-type Stage = "intent" | "compare" | "approved";
+type Stage = "intent" | "compare" | "approved" | "history";
 type WalletStatus = "detecting" | "ready" | "connecting" | "connected" | "missing";
 type ChainPhase = "idle" | "commit-range" | "search" | "commit-verify";
 
@@ -43,6 +46,8 @@ type ApprovalState = {
   approvedAt: string;
   commitVerifyTransactionId: string;
   rankedOffer: RankedOffer;
+  executionId?: string;
+  persistenceError?: string;
 };
 
 const initialForm: IntentForm = {
@@ -67,6 +72,18 @@ const sortLabels: Record<string, string> = {
   lead_time_asc: "빠른 납기순",
 };
 
+const statusLabels: Record<string, string> = {
+  deal_approved: "승인됨",
+  verifying: "검증 중",
+  verified: "ZK 검증 완료",
+  executing: "주문 준비 중",
+  order_submitted: "주문 요청됨",
+  counterparty_accepted: "공급자 접수",
+  settled: "거래 완료",
+  failed: "처리 실패",
+  cancelled: "취소됨",
+};
+
 function won(value: string | number): string {
   return new Intl.NumberFormat("ko-KR", {
     style: "currency",
@@ -85,7 +102,7 @@ function compactHash(value: string): string {
 }
 
 function stageIndex(stage: Stage): number {
-  return steps.findIndex((step) => step.id === stage);
+  return steps.findIndex((step) => (step.id as string) === stage);
 }
 
 export function App() {
@@ -105,6 +122,9 @@ export function App() {
   const [wallet, setWallet] = useState<WalletConnection | null>(null);
   const [lockedIntent, setLockedIntent] = useState<LockedIntent | null>(null);
   const [chainPhase, setChainPhase] = useState<ChainPhase>("idle");
+  const [historyRecords, setHistoryRecords] = useState<ExecutionHistoryRecord[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -170,6 +190,29 @@ export function App() {
     setWallet(null);
     setWalletStatus(await replacement.detectWallet() ? "ready" : "missing");
     return "입력 잠금을 해제했어요. 실제 체인에서는 새 요청용 컨트랙트 주소가 필요할 수 있습니다.";
+  }
+
+  async function openHistory() {
+    setStage("history");
+    setHistoryError(null);
+    if (!wallet) {
+      setHistoryRecords([]);
+      setIsLoadingHistory(false);
+      setHistoryError("내 거래 내역을 확인하려면 먼저 지갑을 연결해 주세요.");
+      return;
+    }
+    setIsLoadingHistory(true);
+    try {
+      setHistoryRecords(await listExecutionHistory(await sha256Hex(wallet.address)));
+    } catch (historyFailure) {
+      setHistoryError(
+        historyFailure instanceof Error
+          ? historyFailure.message
+          : "거래 내역을 불러오지 못했습니다.",
+      );
+    } finally {
+      setIsLoadingHistory(false);
+    }
   }
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -240,7 +283,7 @@ export function App() {
   }
 
   async function confirmApproval() {
-    if (!selectedOffer || !searchResult) return;
+    if (!selectedOffer || !searchResult || !lockedIntent || !wallet) return;
     setIsApproving(true);
     setApprovalError(null);
     setChainPhase("commit-verify");
@@ -250,13 +293,35 @@ export function App() {
         selectedOffer.offer,
       );
       const hash = await offerSnapshotHash(selectedOffer.offer);
-      setApproval({
-        approvalId: crypto.randomUUID(),
+      const approvalId = crypto.randomUUID();
+      const nextApproval: ApprovalState = {
+        approvalId,
         offerSnapshotHash: hash,
         approvedAt: verified.verifiedAt,
         commitVerifyTransactionId: verified.commitVerifyTransactionId,
         rankedOffer: selectedOffer,
-      });
+      };
+
+      try {
+        const persisted = await createExecutionHistory({
+          approvalId,
+          accountIdHash: await sha256Hex(wallet.address),
+          intentId: searchResult.intentId,
+          publicRequirement: lockedIntent.publicRequirement,
+          offer: selectedOffer.offer,
+          offerSnapshotHash: hash,
+          commitRangeTransactionId: lockedIntent.commitRangeTransactionId,
+          commitVerifyTransactionId: verified.commitVerifyTransactionId,
+          approvedAt: verified.verifiedAt,
+        });
+        nextApproval.executionId = persisted.executionId;
+      } catch (persistenceFailure) {
+        nextApproval.persistenceError = persistenceFailure instanceof Error
+          ? persistenceFailure.message
+          : "거래 내역을 저장하지 못했습니다.";
+      }
+
+      setApproval(nextApproval);
       setShowApproval(false);
       setStage("approved");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -272,7 +337,10 @@ export function App() {
     }
   }
 
-  function startOver() {
+  async function startOver() {
+    const previousMode = workflowRef.current.mode;
+    const replacement = createProcurementContractWorkflow();
+    workflowRef.current = replacement;
     setStage("intent");
     setSearchResult(null);
     setSelectedOfferId(null);
@@ -282,6 +350,13 @@ export function App() {
     setConfirmed(false);
     setError(null);
     setApprovalError(null);
+    if (previousMode === "demo" && wallet) {
+      setWallet(await replacement.connectWallet());
+      setWalletStatus("connected");
+    } else if (previousMode === "lace") {
+      setWallet(null);
+      setWalletStatus(await replacement.detectWallet() ? "ready" : "missing");
+    }
   }
 
   const walletLabel = {
@@ -300,6 +375,14 @@ export function App() {
           <strong>Midnight Buy</strong>
         </a>
         <div className="topbar-actions">
+          <button
+            className={`nav-button ${stage === "history" ? "active" : ""}`}
+            type="button"
+            onClick={() => void openHistory()}
+          >
+            <ClockIcon />
+            거래 내역
+          </button>
           <span className="network-pill">
             <i />
             {workflowRef.current.mode === "demo" ? "Demo network" : "Midnight local"}
@@ -322,13 +405,13 @@ export function App() {
       </header>
 
       <main>
-        <section className="hero">
+        {stage !== "history" && <section className="hero">
           <span className="hero-chip"><SparkIcon /> AI가 찾고, Midnight가 지켜요</span>
           <h1>기업 구매를 더 빠르고<br /><em>안전하게.</em></h1>
           <p>필요한 품목만 알려주세요. AI가 공급처를 비교하고<br className="desktop-break" /> 민감한 예산은 공개하지 않은 채 검증해 드려요.</p>
-        </section>
+        </section>}
 
-        <nav className="stepper" aria-label="구매 진행 단계">
+        {stage !== "history" && <nav className="stepper" aria-label="구매 진행 단계">
           {steps.map((step, index) => {
             const activeIndex = stageIndex(stage);
             const isDone = index < activeIndex;
@@ -344,7 +427,7 @@ export function App() {
               </div>
             );
           })}
-        </nav>
+        </nav>}
 
         {stage === "intent" && (
           <section className="workspace intent-layout">
@@ -607,6 +690,70 @@ export function App() {
           </section>
         )}
 
+        {stage === "history" && (
+          <section className="workspace history-workspace">
+            <div className="history-header">
+              <div>
+                <span className="section-kicker">Purchase history</span>
+                <h1>거래 내역</h1>
+                <p>승인한 견적과 Midnight 검증 기록을 한곳에서 확인하세요.</p>
+              </div>
+              <button className="primary-button" type="button" onClick={() => void startOver()}>
+                새 구매 요청 <ArrowIcon />
+              </button>
+            </div>
+
+            {isLoadingHistory && (
+              <div className="history-state"><span className="spinner blue-spinner" /> 거래 내역을 불러오는 중</div>
+            )}
+            {historyError && (
+              <div className="history-state error-state">
+                <strong>{historyError}</strong>
+                <button className="text-button" type="button" onClick={() => void openHistory()}>다시 불러오기</button>
+              </div>
+            )}
+            {!isLoadingHistory && !historyError && historyRecords.length === 0 && (
+              <div className="history-empty">
+                <span><BoxIcon /></span>
+                <h2>아직 승인한 거래가 없어요</h2>
+                <p>첫 번째 구매 요청을 만들고 견적을 승인하면 여기에 기록됩니다.</p>
+                <button className="secondary-button" type="button" onClick={() => void startOver()}>
+                  구매 요청 시작하기
+                </button>
+              </div>
+            )}
+            {!isLoadingHistory && !historyError && historyRecords.length > 0 && (
+              <div className="history-list">
+                {historyRecords.map((record) => (
+                  <article className="history-card" key={record.executionId}>
+                    <div className="history-card-top">
+                      <div>
+                        <span className="history-date">{new Date(record.approvedAt).toLocaleString("ko-KR")}</span>
+                        <h2>{record.offer.title}</h2>
+                        <p>{record.offer.supplierId} · {record.offer.variant ?? "표준 사양"}</p>
+                      </div>
+                      <span className={`status-badge status-${record.status}`}>
+                        <CheckIcon /> {statusLabels[record.status] ?? record.status}
+                      </span>
+                    </div>
+                    <div className="history-summary">
+                      <div><span>승인 금액</span><strong>{won(record.offer.convertedTotalKrw)}</strong></div>
+                      <div><span>수량</span><strong>{number(record.offer.quantity)} {record.offer.unit}</strong></div>
+                      <div><span>납기</span><strong>{record.offer.deliveryDate ?? "미정"}</strong></div>
+                      <div><span>거래 조건</span><strong>{record.offer.incoterm ?? "협의"}</strong></div>
+                    </div>
+                    <div className="history-ledger">
+                      <span><ShieldIcon /> commitRange <code title={record.commitRangeTransactionId}>{compactHash(record.commitRangeTransactionId)}</code></span>
+                      <span><CheckIcon /> commitVerify <code title={record.commitVerifyTransactionId}>{compactHash(record.commitVerifyTransactionId)}</code></span>
+                      <a href={record.offer.sourceUrl} target="_blank" rel="noreferrer">상품 원문 <ExternalIcon /></a>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {stage === "approved" && approval && (
           <section className="workspace approved-workspace">
             <span className="success-mark"><CheckIcon /></span>
@@ -644,13 +791,20 @@ export function App() {
             </div>
 
             <div className="next-step-note">
-              <ClockIcon />
+              {approval.persistenceError ? <ExternalIcon /> : <ClockIcon />}
               <span>
-                <strong>다음 단계: 주문 실행</strong>
-                <small>주문 어댑터가 연결되면 승인된 스냅샷으로 발주를 진행할 수 있어요.</small>
+                <strong>{approval.persistenceError ? "ZK 검증은 완료됐지만 내역 저장에 실패했어요" : "거래 내역에 안전하게 저장됐어요"}</strong>
+                <small>
+                  {approval.persistenceError
+                    ? approval.persistenceError
+                    : `실행 ID ${approval.executionId ?? "-"} · 주문 어댑터 연결 전까지 검증 완료 상태로 보관됩니다.`}
+                </small>
               </span>
             </div>
-            <button className="secondary-button" type="button" onClick={startOver}>새 구매 요청 만들기</button>
+            <div className="approved-actions">
+              <button className="secondary-button" type="button" onClick={() => void startOver()}>새 구매 요청 만들기</button>
+              <button className="primary-button" type="button" onClick={() => void openHistory()}>거래 내역 보기</button>
+            </div>
           </section>
         )}
       </main>
