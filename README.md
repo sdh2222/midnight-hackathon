@@ -1,59 +1,61 @@
-# midnight-hackathon
+# Midnight Hackathon
 
-Private workspace for Midnight Korea Hackathon 2026.
+기업의 최대 예산을 공개하지 않고 AI가 B2B 공급처를 탐색·비교하도록 돕는
+private procurement workspace입니다.
 
-## Local env
+## 구성
 
-Node 22+ (see `.nvmrc`) and Docker Desktop. Copy a template; never commit the copy.
+- `apps/web`: 구매 요청 → 후보 비교 → 사용자 승인 React UI
+- `apps/api`: mock Alibaba catalog와 Jev 평가 파이프라인
+- `contract`: `commitRange`와 `commitVerify` Compact 컨트랙트
+- `packages/shared`: 요청, 견적, 검색 결과의 공통 스키마
 
-```bash
-cp .env.example .env                 # local undeployed
-# cp .env.preview.example .env.preview
-# cp .env.preprod.example .env.preprod
-```
+승인된 거래는 기본적으로 `apps/api/data/executions.json`에 저장되며 이 경로는
+Git에서 제외됩니다. 저장 레코드는 공개 견적과 체인 트랜잭션만 포함하고, 최대 예산과
+salt 및 원본 지갑 주소는 포함하지 않습니다.
 
-| File | Midnight network | Use |
-|---|---|---|
-| `.env.example` | `undeployed` | Docker node + indexer + proof server |
-| `.env.preview.example` | `preview` | Shared public testnet |
-| `.env.preprod.example` | `preprod` | Last stop before mainnet |
+## 로컬 실행
 
-Proof server is always `http://127.0.0.1:6300`. It sees witness data in the clear — keep it local.
-
-GitHub Environments with the same names (`development`, `preview`, `preprod`) hold deploy secrets. Put wallet seeds there, not in git.
-
-## Branch rules
-
-`dev` is the integration branch. Create feature, fix, or docs branches from `dev`
-and open pull requests into `dev`. Run the demo path on `dev` after integrating
-frontend, agents, and Midnight changes.
-
-`main` holds the final reviewed result. Open a pull request from `dev` to
-`main` only after the integrated demo and CI pass. Do not commit directly to
-`main`. Do not force-push or delete `dev` or `main`.
-
-Repository administrators should require pull requests and passing CI for both
-`dev` and `main` in GitHub branch protection settings. The CI workflow also
-checks that pull requests targeting `main` come from `dev`.
-
-## Contract
-
-The Compact contract lives in `contract/`. Spec: `docs/superpowers/specs/2026-09-18-intent-compact.md`. Architecture: `docs/superpowers/specs/2026-09-21-marketplace-local-verify.md`.
-
-Two impure circuits: `commitRange` locks `C = hash(tag 1, priceMax, sourceId, dateMax, salt)`. `commitVerify` re-hashes that preimage, checks the marketplace offer fits, and writes `C_offer`. Zero `sourceId` or `dateMax` means unconstrained at verify; those zeros are still inside `C`.
+Node.js 22+, Docker Desktop, WSL2가 필요합니다.
 
 ```bash
-# once: Compact developer tool, then the toolchain this contract is pinned to (language 0.26.0, runtime 0.19.0)
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
-compact update 0.34.0
-
 npm install
-npm test            # compiles with --skip-zk and runs the simulator tests
+cp .env.example .env
+
+npm run dev:api
+npm run dev:web
 ```
 
-`contract/src/managed/` is generated and gitignored. Run `npm run compact:zk --workspace contract` only when you need proving keys for a deployment.
+로컬 Midnight 환경은 node `:9944`, indexer `:8088`, proof server `:6300`을
+사용합니다. proof server는 증명 witness를 처리하므로 로컬에서만 실행하세요.
 
-## Docs
+## Compact와 배포
 
-- [Midnight Korea docs](https://docs.midnightkorea.org/)
-- [Networks and environments](https://docs.midnight.network/guides/midnight-local-network)
+현재 Midnight.js 4.1.1 / ledger 8 조합에 맞춰 Compact 0.31.1,
+language 0.23.0, runtime 0.16.0을 사용합니다.
+
+```bash
+npm run compact:zk --workspace @midnight-hackathon/intent-contract
+npm run deploy:local --workspace @midnight-hackathon/intent-contract
+```
+
+배포 명령은 로컬 컨트랙트를 배포하고 실제
+`commitRange → commitVerify` 트랜잭션을 실행합니다. 출력된 주소를 루트
+`.env`의 `VITE_CONTRACT_ADDRESS`에 설정하세요.
+
+MVP 회로는 비공개 최대 예산과 salt의 commitment를 열어 선택 견적이 예산
+이하인지 증명합니다. proof-server 호환성을 위해 ledger는 평탄화된 단일 intent
+셀을 사용하므로, 현재 배포 인스턴스 하나에는 활성 intent 하나만 기록됩니다.
+공급처와 납기 조건은 앱 계층에서 검증합니다.
+
+## 검증
+
+```bash
+npm test
+npm run build
+```
+
+## 브랜치
+
+`dev`가 통합 브랜치이고 `main`은 최종 검토 결과를 보관합니다. 기능 브랜치는
+`dev`에서 만들고 PR도 `dev`를 대상으로 여는 것을 원칙으로 합니다.

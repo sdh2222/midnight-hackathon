@@ -23,6 +23,7 @@ keys/
 zkir/
 .midnight-state.json
 .mn-app/
+midnight-level-db/
 proof-server.log
 accounts.json
 managed/
@@ -31,6 +32,7 @@ managed/
 dist/
 build/
 coverage/
+*.tsbuildinfo
 .turbo/
 .next/
 out/
@@ -40,6 +42,7 @@ out/
 *.tmp
 tmp/
 .cache/
+apps/api/data/
 
 # IDE
 .idea/

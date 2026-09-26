@@ -74,29 +74,31 @@ export class IntentSimulator {
   }
 
   async commitRange(p: RangeArgs): Promise<Ledger> {
-    const ctx = createCircuitContext('commitRange', this.address, this.caller, this.state, this.privateState);
+    if (p.priceMax <= 0n) throw new Error('limit must be positive');
+    const ctx = createCircuitContext(this.address, this.caller, this.state, this.privateState);
     const results = await this.contract.impureCircuits.commitRange(
-      ctx, p.intentId, p.itemId, p.quantity, p.currency, p.version, p.priceMax, p.sourceId, p.dateMax, p.salt,
+      ctx,
+      p.intentId,
+      p.itemId,
+      p.quantity,
+      p.version,
+      pureCircuits.rangeCommitment(p.priceMax, p.sourceId, p.dateMax, p.salt),
     );
-    this.state = results.context.callContext.currentQueryContext.state;
+    this.state = results.context.currentQueryContext.state;
     return this.ledger();
   }
 
   async commitVerify(p: VerifyArgs): Promise<Ledger> {
-    const ctx = createCircuitContext('commitVerify', this.address, this.caller, this.state, this.privateState);
+    const ctx = createCircuitContext(this.address, this.caller, this.state, this.privateState);
     const results = await this.contract.impureCircuits.commitVerify(
       ctx,
       p.intentId,
       p.priceMax,
-      p.sourceId,
-      p.dateMax,
       p.salt,
       p.offerPrice,
-      p.offerSource,
-      p.offerDate,
-      p.offerSalt,
+      pureCircuits.offerCommitment(p.offerPrice, p.offerSource, p.offerDate, p.offerSalt),
     );
-    this.state = results.context.callContext.currentQueryContext.state;
+    this.state = results.context.currentQueryContext.state;
     return this.ledger();
   }
 }

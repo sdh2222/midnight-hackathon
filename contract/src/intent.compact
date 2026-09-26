@@ -1,27 +1,19 @@
-pragma language_version >= 0.26.0;
+pragma language_version >= 0.23.0;
 
 import CompactStandardLibrary;
 
 export enum Currency { KRW }
 export enum OfferStatus { Verified }
 
-export struct RangeRecord {
-  owner: Bytes<32>;
-  itemId: Bytes<32>;
-  quantity: Uint<32>;
-  currency: Currency;
-  version: Uint<32>;
-  commitment: Bytes<32>;
-}
-
-export struct OfferRecord {
-  offerCommit: Bytes<32>;
-  status: OfferStatus;
-}
-
-export ledger ranges: Map<Bytes<32>, RangeRecord>;
-export ledger ownerItems: Set<Bytes<32>>;
-export ledger offers: Map<Bytes<32>, OfferRecord>;
+export ledger rangeIntentId: Bytes<32>;
+export ledger rangeItemId: Bytes<32>;
+export ledger rangeQuantity: Uint<32>;
+export ledger rangeVersion: Uint<32>;
+export ledger rangeCommitmentValue: Bytes<32>;
+export ledger hasRange: Boolean;
+export ledger offerIntentId: Bytes<32>;
+export ledger offerCommitmentValue: Bytes<32>;
+export ledger hasOffer: Boolean;
 
 export circuit rangeCommitment(
   priceMax: Uint<64>,
@@ -29,10 +21,7 @@ export circuit rangeCommitment(
   dateMax: Uint<32>,
   salt: Bytes<32>
 ): Bytes<32> {
-  return disclose(persistentCommit<[Uint<8>, Uint<64>, Bytes<32>, Uint<32>]>(
-    [1, priceMax, sourceId, dateMax],
-    salt
-  ));
+  return disclose(persistentCommit<Uint<64>>(priceMax, salt));
 }
 
 export circuit offerCommitment(
@@ -41,78 +30,46 @@ export circuit offerCommitment(
   offerDate: Uint<32>,
   offerSalt: Bytes<32>
 ): Bytes<32> {
-  return disclose(persistentCommit<[Uint<8>, Uint<64>, Bytes<32>, Uint<32>]>(
-    [2, offerPrice, offerSource, offerDate],
-    offerSalt
-  ));
-}
-
-circuit ownerItemKey(owner: Bytes<32>, itemId: Bytes<32>): Bytes<32> {
-  return persistentHash<Vector<2, Bytes<32>>>([owner, itemId]);
+  return disclose(persistentCommit<Uint<64>>(offerPrice, offerSalt));
 }
 
 export circuit commitRange(
   intentId: Bytes<32>,
   itemId: Bytes<32>,
   quantity: Uint<32>,
-  currency: Currency,
   version: Uint<32>,
-  priceMax: Uint<64>,
-  sourceId: Bytes<32>,
-  dateMax: Uint<32>,
-  salt: Bytes<32>
+  commitment: Bytes<32>
 ): [] {
   assert(quantity > 0, "quantity must be positive");
-  assert(priceMax > 0, "limit must be positive");
-
   const id = disclose(intentId);
-  assert(!ranges.member(id), "intent already committed");
-
-  const owner = ownPublicKey().bytes;
-  const ownerKey = disclose(ownerItemKey(owner, itemId));
-  assert(!ownerItems.member(ownerKey), "owner already has a range for this item");
-
-  ranges.insert(id, RangeRecord {
-    owner: disclose(owner),
-    itemId: disclose(itemId),
-    quantity: disclose(quantity),
-    currency: disclose(currency),
-    version: disclose(version),
-    commitment: rangeCommitment(priceMax, sourceId, dateMax, salt)
-  });
-  ownerItems.insert(ownerKey);
+  assert(!hasRange, "intent already committed");
+  rangeIntentId = id;
+  rangeItemId = disclose(itemId);
+  rangeQuantity = disclose(quantity);
+  rangeVersion = disclose(version);
+  rangeCommitmentValue = disclose(commitment);
+  hasRange = true;
 }
 
 export circuit commitVerify(
   intentId: Bytes<32>,
   priceMax: Uint<64>,
-  sourceId: Bytes<32>,
-  dateMax: Uint<32>,
   salt: Bytes<32>,
   offerPrice: Uint<64>,
-  offerSource: Bytes<32>,
-  offerDate: Uint<32>,
-  offerSalt: Bytes<32>
+  offerCommitment: Bytes<32>
 ): [] {
   const id = disclose(intentId);
-  assert(ranges.member(id), "range missing");
+  assert(hasRange, "range missing");
 
-  const row = ranges.lookup(id);
-  assert(ownPublicKey().bytes == row.owner, "caller is not the owner");
+  assert(rangeIntentId == id, "range missing");
   assert(
-    rangeCommitment(priceMax, sourceId, dateMax, salt) == row.commitment,
+    rangeCommitment(priceMax, default<Bytes<32>>, 0, salt) == rangeCommitmentValue,
     "range does not open"
   );
   assert(offerPrice > 0, "offer must be positive");
   assert(offerPrice <= priceMax, "offer above buyer limit");
-
-  const unconstrainedSource = default<Bytes<32>>;
-  assert(sourceId == unconstrainedSource || offerSource == sourceId, "source mismatch");
-  assert(dateMax == 0 || offerDate <= dateMax, "date after buyer max");
-  assert(!offers.member(id), "intent already verified");
-
-  offers.insert(id, OfferRecord {
-    offerCommit: offerCommitment(offerPrice, offerSource, offerDate, offerSalt),
-    status: OfferStatus.Verified
-  });
+  assert(!hasOffer, "intent already verified");
+  offerIntentId = id;
+  offerCommitmentValue = disclose(offerCommitment);
+  hasOffer = true;
 }
