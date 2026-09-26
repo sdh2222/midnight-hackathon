@@ -44,3 +44,46 @@ export async function listExecutionHistory(
   if (!response.ok) throw await apiError(response, "거래 내역을 불러오지 못했습니다.");
   return ExecutionHistoryListSchema.parse(await response.json());
 }
+
+async function postExecutionAction(
+  executionId: string,
+  accountIdHash: string,
+  action: "sync" | "retry",
+  fallback: string,
+  fetchImplementation: typeof globalThis.fetch,
+): Promise<ExecutionHistoryRecord> {
+  const response = await fetchImplementation(endpoint(
+    `/v1/executions/${encodeURIComponent(executionId)}/${action}`
+      + `?accountIdHash=${encodeURIComponent(accountIdHash)}`,
+  ), { method: "POST" });
+  if (!response.ok) throw await apiError(response, fallback);
+  return ExecutionHistoryRecordSchema.parse(await response.json());
+}
+
+export async function syncExecutionHistory(
+  executionId: string,
+  accountIdHash: string,
+  fetchImplementation: typeof globalThis.fetch = globalThis.fetch,
+): Promise<ExecutionHistoryRecord> {
+  return postExecutionAction(
+    executionId,
+    accountIdHash,
+    "sync",
+    "주문 상태를 동기화하지 못했습니다.",
+    fetchImplementation,
+  );
+}
+
+export async function retryExecutionHistory(
+  executionId: string,
+  accountIdHash: string,
+  fetchImplementation: typeof globalThis.fetch = globalThis.fetch,
+): Promise<ExecutionHistoryRecord> {
+  return postExecutionAction(
+    executionId,
+    accountIdHash,
+    "retry",
+    "주문을 다시 요청하지 못했습니다.",
+    fetchImplementation,
+  );
+}

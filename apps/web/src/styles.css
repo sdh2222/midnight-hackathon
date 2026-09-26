@@ -661,7 +661,7 @@ main { min-height: calc(100vh - 144px); }
 .status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 7px 9px; color: #0d8850; background: #eafaf1; border-radius: 9px; font-size: 10px; font-weight: 750; white-space: nowrap; }
 .status-badge svg { width: 13px; }
 .status-failed, .status-cancelled { color: #d33745; background: #fff0f1; }
-.status-executing, .status-order_submitted { color: var(--blue-dark); background: var(--blue-soft); }
+.status-executing, .status-retrying, .status-order_submitted { color: var(--blue-dark); background: var(--blue-soft); }
 
 .history-summary { margin-top: 20px; padding: 17px 0; display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; border-top: 1px solid #edf0f2; border-bottom: 1px solid #edf0f2; }
 .history-summary > div { min-width: 0; padding: 0 17px; border-right: 1px solid #edf0f2; }
@@ -672,12 +672,15 @@ main { min-height: calc(100vh - 144px); }
 .history-summary strong { margin-top: 5px; color: #333d4b; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-summary > div:first-child strong { color: var(--blue-dark); font-size: 15px; }
 
-.history-ledger { min-height: 36px; padding-top: 14px; display: flex; align-items: center; gap: 16px; color: #8b95a1; font-size: 9px; }
+.history-ledger { min-height: 36px; padding-top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px; color: #8b95a1; font-size: 9px; }
 .history-ledger span, .history-ledger a { display: inline-flex; align-items: center; gap: 5px; }
 .history-ledger svg { width: 12px; }
 .history-ledger code { color: #4e5968; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .history-ledger a { margin-left: auto; color: #8b95a1; text-decoration: none; }
 .history-ledger a:hover { color: var(--blue); }
+.history-action-error { margin: 0 0 13px; padding: 12px 15px; color: #d33745; background: #fff0f1; border-radius: 12px; font-size: 11px; }
+.history-retry { margin-top: 12px; padding: 11px 13px; display: flex; align-items: center; justify-content: space-between; gap: 14px; color: #d33745; background: #fff7f7; border-radius: 12px; font-size: 10px; }
+.history-retry .text-button:disabled { opacity: .55; cursor: wait; }
 
 footer {
   min-height: 72px;

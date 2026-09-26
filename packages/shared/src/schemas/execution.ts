@@ -8,6 +8,7 @@ export const ExecutionStatusSchema = z.enum([
   "verifying",
   "verified",
   "executing",
+  "retrying",
   "order_submitted",
   "counterparty_accepted",
   "settled",
@@ -59,6 +60,10 @@ export const CreateExecutionHistorySchema = z
 export const ExecutionHistoryRecordSchema = CreateExecutionHistorySchema.extend({
   executionId: z.string().uuid(),
   status: ExecutionStatusSchema,
+  providerOrderId: z.string().trim().min(1).max(256).optional(),
+  failureCode: z.string().trim().min(1).max(128).optional(),
+  attemptCount: z.number().int().nonnegative().default(0),
+  lastSyncedAt: z.string().datetime({ offset: true }).optional(),
   events: z.array(ExecutionEventSchema).min(1),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),

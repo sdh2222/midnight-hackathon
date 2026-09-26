@@ -7,7 +7,12 @@ import {
   type RankedOffer,
   type SearchResponse,
 } from "@midnight-hackathon/shared";
-import { createExecutionHistory, listExecutionHistory } from "./api/executions";
+import {
+  createExecutionHistory,
+  listExecutionHistory,
+  retryExecutionHistory,
+  syncExecutionHistory,
+} from "./api/executions";
 import { buildSearchRequest, searchOffers } from "./api/search";
 import {
   createProcurementContractWorkflow,
@@ -46,7 +51,7 @@ type ApprovalState = {
   approvedAt: string;
   commitVerifyTransactionId: string;
   rankedOffer: RankedOffer;
-  executionId?: string;
+  executionRecord?: ExecutionHistoryRecord;
   persistenceError?: string;
 };
 
@@ -77,6 +82,7 @@ const statusLabels: Record<string, string> = {
   verifying: "검증 중",
   verified: "ZK 검증 완료",
   executing: "주문 준비 중",
+  retrying: "재시도 중",
   order_submitted: "주문 요청됨",
   counterparty_accepted: "공급자 접수",
   settled: "거래 완료",
@@ -125,6 +131,8 @@ export function App() {
   const [historyRecords, setHistoryRecords] = useState<ExecutionHistoryRecord[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyActionError, setHistoryActionError] = useState<string | null>(null);
+  const [retryingExecutionId, setRetryingExecutionId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -142,6 +150,48 @@ export function App() {
       active = false;
     };
   }, []);
+
+  const synchronizableExecutionIds = historyRecords
+    .filter(({ status }) => status === "order_submitted" || status === "counterparty_accepted")
+    .map(({ executionId }) => executionId)
+    .join(",");
+
+  useEffect(() => {
+    if (stage !== "history" || !wallet || !synchronizableExecutionIds) return;
+    let active = true;
+    let synchronizing = false;
+
+    const synchronize = async () => {
+      if (synchronizing) return;
+      synchronizing = true;
+      try {
+        const accountIdHash = await sha256Hex(wallet.address);
+        const ids = synchronizableExecutionIds.split(",");
+        const updates = await Promise.all(ids.map(async (executionId) => {
+          try {
+            return await syncExecutionHistory(executionId, accountIdHash);
+          } catch {
+            return null;
+          }
+        }));
+        if (!active) return;
+        const byId = new Map(
+          updates.filter((record): record is ExecutionHistoryRecord => record !== null)
+            .map((record) => [record.executionId, record]),
+        );
+        setHistoryRecords((records) => records.map((record) => byId.get(record.executionId) ?? record));
+      } finally {
+        synchronizing = false;
+      }
+    };
+
+    void synchronize();
+    const interval = window.setInterval(() => void synchronize(), 3_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [stage, wallet, synchronizableExecutionIds]);
 
   const maxBudget = Number(form.priceMaxKrw);
   const selectedOffer = useMemo(
@@ -195,6 +245,7 @@ export function App() {
   async function openHistory() {
     setStage("history");
     setHistoryError(null);
+    setHistoryActionError(null);
     if (!wallet) {
       setHistoryRecords([]);
       setIsLoadingHistory(false);
@@ -212,6 +263,27 @@ export function App() {
       );
     } finally {
       setIsLoadingHistory(false);
+    }
+  }
+
+  async function retryOrder(record: ExecutionHistoryRecord) {
+    if (!wallet || retryingExecutionId) return;
+    setHistoryActionError(null);
+    setRetryingExecutionId(record.executionId);
+    try {
+      const updated = await retryExecutionHistory(
+        record.executionId,
+        await sha256Hex(wallet.address),
+      );
+      setHistoryRecords((records) => records.map((candidate) => (
+        candidate.executionId === updated.executionId ? updated : candidate
+      )));
+    } catch (retryError) {
+      setHistoryActionError(
+        retryError instanceof Error ? retryError.message : "주문을 다시 요청하지 못했습니다.",
+      );
+    } finally {
+      setRetryingExecutionId(null);
     }
   }
 
@@ -314,7 +386,7 @@ export function App() {
           commitVerifyTransactionId: verified.commitVerifyTransactionId,
           approvedAt: verified.verifiedAt,
         });
-        nextApproval.executionId = persisted.executionId;
+        nextApproval.executionRecord = persisted;
       } catch (persistenceFailure) {
         nextApproval.persistenceError = persistenceFailure instanceof Error
           ? persistenceFailure.message
@@ -712,6 +784,9 @@ export function App() {
                 <button className="text-button" type="button" onClick={() => void openHistory()}>다시 불러오기</button>
               </div>
             )}
+            {historyActionError && (
+              <div className="history-action-error" role="alert">{historyActionError}</div>
+            )}
             {!isLoadingHistory && !historyError && historyRecords.length === 0 && (
               <div className="history-empty">
                 <span><BoxIcon /></span>
@@ -745,8 +820,25 @@ export function App() {
                     <div className="history-ledger">
                       <span><ShieldIcon /> commitRange <code title={record.commitRangeTransactionId}>{compactHash(record.commitRangeTransactionId)}</code></span>
                       <span><CheckIcon /> commitVerify <code title={record.commitVerifyTransactionId}>{compactHash(record.commitVerifyTransactionId)}</code></span>
+                      {record.providerOrderId && (
+                        <span title={record.providerOrderId}><BoxIcon /> Mock 주문 <code>{compactHash(record.providerOrderId)}</code></span>
+                      )}
+                      <span>시도 {record.attemptCount}회</span>
                       <a href={record.offer.sourceUrl} target="_blank" rel="noreferrer">상품 원문 <ExternalIcon /></a>
                     </div>
+                    {record.status === "failed" && (
+                      <div className="history-retry">
+                        <span>주문 처리 실패 · {record.failureCode ?? "UNKNOWN_ERROR"}</span>
+                        <button
+                          className="text-button"
+                          type="button"
+                          disabled={retryingExecutionId === record.executionId}
+                          onClick={() => void retryOrder(record)}
+                        >
+                          {retryingExecutionId === record.executionId ? "재시도 중" : "주문 다시 시도"}
+                        </button>
+                      </div>
+                    )}
                   </article>
                 ))}
               </div>
@@ -793,11 +885,19 @@ export function App() {
             <div className="next-step-note">
               {approval.persistenceError ? <ExternalIcon /> : <ClockIcon />}
               <span>
-                <strong>{approval.persistenceError ? "ZK 검증은 완료됐지만 내역 저장에 실패했어요" : "거래 내역에 안전하게 저장됐어요"}</strong>
+                <strong>
+                  {approval.persistenceError
+                    ? "ZK 검증은 완료됐지만 내역 저장에 실패했어요"
+                    : approval.executionRecord?.status === "failed"
+                      ? "검증은 완료됐지만 Mock 주문 요청에 실패했어요"
+                      : "Mock Alibaba 주문 요청이 접수됐어요"}
+                </strong>
                 <small>
                   {approval.persistenceError
                     ? approval.persistenceError
-                    : `실행 ID ${approval.executionId ?? "-"} · 주문 어댑터 연결 전까지 검증 완료 상태로 보관됩니다.`}
+                    : approval.executionRecord?.status === "failed"
+                      ? `${approval.executionRecord.failureCode ?? "UNKNOWN_ERROR"} · 거래 내역에서 다시 시도할 수 있어요.`
+                      : `Mock 주문 ID ${approval.executionRecord?.providerOrderId ?? "-"} · 실제 Alibaba 주문은 아직 전송되지 않습니다.`}
                 </small>
               </span>
             </div>

@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { buildApp } from "./app.js";
+import { createOrderAdapter } from "./integrations/orders/create-order-adapter.js";
 import { JsonFileExecutionStore } from "./modules/executions/execution-store.js";
 
 try {
@@ -15,6 +16,11 @@ const executionStorePath = process.env.EXECUTION_STORE_PATH
   ?? fileURLToPath(new URL("../data/executions.json", import.meta.url));
 const app = buildApp({
   executionStore: new JsonFileExecutionStore(executionStorePath),
+  orderAdapter: createOrderAdapter(process.env),
+  executionRetryPolicy: {
+    maxRetries: Number.parseInt(process.env.ORDER_MAX_RETRIES ?? "2", 10),
+    baseDelayMs: Number.parseInt(process.env.ORDER_RETRY_BASE_MS ?? "100", 10),
+  },
 });
 
 try {

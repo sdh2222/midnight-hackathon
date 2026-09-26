@@ -77,7 +77,9 @@ describe("execution history API", () => {
     expect(created).toMatchObject({
       executionId,
       approvalId,
-      status: "verified",
+      status: "order_submitted",
+      providerOrderId: `mock-ali-${executionId}`,
+      attemptCount: 1,
       commitRangeTransactionId: "range-tx-001",
       commitVerifyTransactionId: "verify-tx-001",
     });
@@ -107,6 +109,21 @@ describe("execution history API", () => {
     });
     expect(detailResponse.statusCode).toBe(200);
     expect(ExecutionHistoryRecordSchema.parse(detailResponse.json()).offer.title).toBe(offer.title);
+
+    const acceptedResponse = await restarted.inject({
+      method: "POST",
+      url: `/v1/executions/${executionId}/sync?accountIdHash=${accountIdHash}`,
+    });
+    expect(acceptedResponse.statusCode).toBe(200);
+    expect(ExecutionHistoryRecordSchema.parse(acceptedResponse.json()).status)
+      .toBe("counterparty_accepted");
+
+    const settledResponse = await restarted.inject({
+      method: "POST",
+      url: `/v1/executions/${executionId}/sync?accountIdHash=${accountIdHash}`,
+    });
+    expect(settledResponse.statusCode).toBe(200);
+    expect(ExecutionHistoryRecordSchema.parse(settledResponse.json()).status).toBe("settled");
 
     const persisted = await readFile(storePath, "utf8");
     expect(persisted).not.toContain("priceMaxKrw");

@@ -12,6 +12,12 @@ import {
   type JevEnvironment,
 } from "./integrations/jev/create-jev-provider.js";
 import { JevProviderError } from "./integrations/jev/http-jev.js";
+import type { OrderAdapter } from "./integrations/orders/order-adapter.js";
+import { MockOrderAdapter } from "./integrations/orders/mock-order-adapter.js";
+import {
+  ExecutionService,
+  type ExecutionRetryPolicy,
+} from "./modules/executions/execution-service.js";
 import {
   InMemoryExecutionStore,
   type ExecutionStore,
@@ -24,6 +30,9 @@ export type BuildAppOptions = {
   environment?: JevEnvironment;
   fetch?: typeof globalThis.fetch;
   executionStore?: ExecutionStore;
+  orderAdapter?: OrderAdapter;
+  executionRetryPolicy?: Partial<ExecutionRetryPolicy>;
+  executionWait?: (milliseconds: number) => Promise<void>;
 };
 
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
@@ -31,6 +40,15 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const now = options.now ?? (() => new Date().toISOString());
   const createId = options.createId ?? randomUUID;
   const executionStore = options.executionStore ?? new InMemoryExecutionStore();
+  const executionService = new ExecutionService({
+    store: executionStore,
+    adapter: options.orderAdapter ?? new MockOrderAdapter(),
+    now,
+    ...(options.executionRetryPolicy
+      ? { retryPolicy: options.executionRetryPolicy }
+      : {}),
+    ...(options.executionWait ? { wait: options.executionWait } : {}),
+  });
   const orchestrator = new SearchOrchestrator({
     catalog: new MockAlibabaCatalog(),
     jev: createJevProvider(options.environment ?? process.env, options.fetch),
@@ -85,6 +103,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       ...parsed.data,
       executionId: createId(),
       status: "verified",
+      attemptCount: 0,
       events: [{
         status: "verified",
         occurredAt: parsed.data.approvedAt,
@@ -93,7 +112,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       createdAt: timestamp,
       updatedAt: timestamp,
     };
-    return reply.code(201).send(await executionStore.create(record));
+    return reply.code(201).send(await executionService.createAndExecute(record));
   });
 
   app.get("/v1/executions", async (request, reply) => {
@@ -115,6 +134,37 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     const record = await executionStore.get(executionId, parsedAccount.data);
     if (!record) return reply.code(404).send({ error: "execution_not_found" });
     return reply.code(200).send(record);
+  });
+
+  app.post("/v1/executions/:executionId/sync", async (request, reply) => {
+    const { executionId } = request.params as { executionId?: unknown };
+    const { accountIdHash } = request.query as { accountIdHash?: unknown };
+    const parsedAccount = Bytes32HexSchema.safeParse(accountIdHash);
+    if (typeof executionId !== "string" || !parsedAccount.success) {
+      return reply.code(400).send({ error: "invalid_execution_lookup" });
+    }
+    const record = await executionService.sync(executionId, parsedAccount.data);
+    if (!record) return reply.code(404).send({ error: "execution_not_found" });
+    return reply.code(200).send(record);
+  });
+
+  app.post("/v1/executions/:executionId/retry", async (request, reply) => {
+    const { executionId } = request.params as { executionId?: unknown };
+    const { accountIdHash } = request.query as { accountIdHash?: unknown };
+    const parsedAccount = Bytes32HexSchema.safeParse(accountIdHash);
+    if (typeof executionId !== "string" || !parsedAccount.success) {
+      return reply.code(400).send({ error: "invalid_execution_lookup" });
+    }
+    try {
+      const record = await executionService.retry(executionId, parsedAccount.data);
+      if (!record) return reply.code(404).send({ error: "execution_not_found" });
+      return reply.code(200).send(record);
+    } catch (error) {
+      return reply.code(409).send({
+        error: "execution_not_retryable",
+        message: error instanceof Error ? error.message : "Execution cannot be retried",
+      });
+    }
   });
 
   return app;
