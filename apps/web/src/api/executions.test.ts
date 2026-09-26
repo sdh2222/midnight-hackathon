@@ -1,6 +1,11 @@
 import type { CreateExecutionHistory, ExecutionHistoryRecord } from "@midnight-hackathon/shared";
 import { describe, expect, it, vi } from "vitest";
-import { createExecutionHistory, listExecutionHistory } from "./executions";
+import {
+  createExecutionHistory,
+  listExecutionHistory,
+  retryExecutionHistory,
+  syncExecutionHistory,
+} from "./executions";
 
 const input: CreateExecutionHistory = {
   approvalId: "5980675d-1412-4bbb-b5f4-57bcbb59245d",
@@ -40,6 +45,7 @@ const record: ExecutionHistoryRecord = {
   ...input,
   executionId: "c19f58ce-fb62-433d-b4f2-7b84c9ef9326",
   status: "verified",
+  attemptCount: 0,
   events: [{ status: "verified", occurredAt: input.approvedAt }],
   createdAt: input.approvedAt,
   updatedAt: input.approvedAt,
@@ -62,5 +68,20 @@ describe("execution history API client", () => {
       return Response.json([record]);
     });
     await expect(listExecutionHistory(input.accountIdHash, fetchMock)).resolves.toEqual([record]);
+  });
+
+  it.each([
+    ["sync", syncExecutionHistory],
+    ["retry", retryExecutionHistory],
+  ] as const)("posts the %s action for an execution", async (action, request) => {
+    const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(url)).toContain(`/v1/executions/${record.executionId}/${action}`);
+      expect(String(url)).toContain(`accountIdHash=${input.accountIdHash}`);
+      expect(init?.method).toBe("POST");
+      return Response.json(record);
+    });
+
+    await expect(request(record.executionId, input.accountIdHash, fetchMock))
+      .resolves.toEqual(record);
   });
 });

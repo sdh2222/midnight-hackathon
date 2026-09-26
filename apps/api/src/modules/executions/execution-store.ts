@@ -10,6 +10,7 @@ export interface ExecutionStore {
   list(accountIdHash: string): Promise<ExecutionHistoryRecord[]>;
   get(executionId: string, accountIdHash: string): Promise<ExecutionHistoryRecord | undefined>;
   create(record: ExecutionHistoryRecord): Promise<ExecutionHistoryRecord>;
+  update(record: ExecutionHistoryRecord): Promise<ExecutionHistoryRecord>;
 }
 
 export class InMemoryExecutionStore implements ExecutionStore {
@@ -35,6 +36,18 @@ export class InMemoryExecutionStore implements ExecutionStore {
     const existing = this.records.find(({ approvalId }) => approvalId === parsed.approvalId);
     if (existing) return existing;
     this.records.push(parsed);
+    return parsed;
+  }
+
+  async update(record: ExecutionHistoryRecord): Promise<ExecutionHistoryRecord> {
+    const parsed = ExecutionHistoryRecordSchema.parse(record);
+    const index = this.records.findIndex(
+      (candidate) =>
+        candidate.executionId === parsed.executionId
+        && candidate.accountIdHash === parsed.accountIdHash,
+    );
+    if (index < 0) throw new Error("execution record not found");
+    this.records[index] = parsed;
     return parsed;
   }
 }
@@ -80,6 +93,25 @@ export class JsonFileExecutionStore implements ExecutionStore {
     return result;
   }
 
+  async update(record: ExecutionHistoryRecord): Promise<ExecutionHistoryRecord> {
+    const parsed = ExecutionHistoryRecordSchema.parse(record);
+
+    this.writeQueue = this.writeQueue.then(async () => {
+      const records = await this.readRecords();
+      const index = records.findIndex(
+        (candidate) =>
+          candidate.executionId === parsed.executionId
+          && candidate.accountIdHash === parsed.accountIdHash,
+      );
+      if (index < 0) throw new Error("execution record not found");
+      records[index] = parsed;
+      await this.writeRecords(records);
+    });
+
+    await this.writeQueue;
+    return parsed;
+  }
+
   private async readRecords(): Promise<ExecutionHistoryRecord[]> {
     try {
       const content = await readFile(this.filePath, "utf8");
@@ -90,5 +122,10 @@ export class JsonFileExecutionStore implements ExecutionStore {
       }
       throw error;
     }
+  }
+
+  private async writeRecords(records: ExecutionHistoryRecord[]): Promise<void> {
+    await mkdir(dirname(this.filePath), { recursive: true });
+    await writeFile(this.filePath, `${JSON.stringify(records, null, 2)}\n`, "utf8");
   }
 }

@@ -14,6 +14,11 @@ private procurement workspace입니다.
 Git에서 제외됩니다. 저장 레코드는 공개 견적과 체인 트랜잭션만 포함하고, 최대 예산과
 salt 및 원본 지갑 주소는 포함하지 않습니다.
 
+승인 직후 주문 상태 머신이 실행되고 Mock Alibaba 어댑터가 주문 접수 ID를 만듭니다.
+거래 내역 화면은 공급자 접수와 완료 상태를 동기화하며 실패 주문의 재시도를 지원합니다.
+현재 구현은 실제 Alibaba에 주문을 전송하지 않으며, 추후 `OrderAdapter`만 교체하도록
+분리되어 있습니다.
+
 ## 로컬 실행
 
 Node.js 22+, Docker Desktop, WSL2가 필요합니다.
