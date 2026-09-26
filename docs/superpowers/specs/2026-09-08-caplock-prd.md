@@ -1,285 +1,198 @@
-# Caplock — PRD (hackathon)
+# Private Intent Execution for AI Agents — 해커톤 MVP PRD
 
-Date: 2026-09-08
-Hackathon: Midnight Korea 2026 (submit by 2026-09-28 00:00 KST)
-Working title: **Caplock**
-Form: hybrid request hub + Midnight check engine (not a carbon market)
+<!-- 변경 이력 (2026-09-18): 기존 Caplock의 공장 배출 강도 검증 PRD → 구매자·판매자의 비공개 거래 intent 협상 및 Midnight 검증 PRD. 기존 파일명은 링크가 끊기지 않도록 유지했다. -->
+<!-- 변경 이력: Verifier/Plant/Buyer/Bank 역할 → Buyer/Seller/AI parser/Buyer Agent/Seller Agent/증명 실행자 역할. E/P/salt와 band_id → 비공개 가격 한도와 조건 검증 결과. lock/request/grant/proveBand 흐름 → 입력/변환/승인/협상/증명/검증 흐름. -->
+<!-- 변경 이력 (2026-09-18): AI 제공자·백엔드에 대한 비공개 여부 미확정 → 두 주체는 원문과 가격 한도를 처리할 수 있고, 거래 상대방·상대 에이전트·공개 체인에는 가격 한도를 공개하지 않는 MVP 방침으로 확정. -->
 
-This document is the product requirements brief. It replaces
-`2026-09-08-caplock-design.md` as the product direction. That earlier note is
-kept as background on K-ETS vocabulary only.
+상태: 비공개 범위 확정 / 계약·API 세부 사항 팀 검토용 초안
+원래 작성일: 2026-09-08 / 방향 수정: 2026-09-18
+프로젝트: Midnight Korea Hackathon 2026
 
-Editable architecture boards (Cursor / VS Code Excalidraw extension, or
-[excalidraw.com](https://excalidraw.com)):
+> 이 문서는 사용자가 설명한 “Private Intent Execution for AI Agents”를 기준으로 한다. 기존 Caplock 설계 문서와 docs/superpowers/diagrams의 그림은 **이전 아이디어의 기록**이며, 이 PRD의 거래 흐름이나 계약 명세로 사용하지 않는다.
 
-- [`docs/superpowers/diagrams/caplock-architecture.excalidraw`](../diagrams/caplock-architecture.excalidraw)
-  — three frames: shared hybrid, Track A, Track B
+## 1. 한 문장 설명
 
-PNG previews of those frames:
+구매자와 판매자가 자연어로 거래 의도를 입력하고, AI가 구조화한 조건을 각자 승인한다. 백엔드는 양측의 가격 한도를 처리하되 상대방과 상대 에이전트에는 공개하지 않는다. 비공개 가격 조건을 만족하는지는 ZK proof로 증명해 Midnight에서 검증한다.
 
-- [Shared hybrid](../diagrams/caplock-shared-hybrid.png)
-- [Track A — buyer](../diagrams/caplock-track-a-buyer.png)
-- [Track B — bank](../diagrams/caplock-track-b-bank.png)
+## 2. 문제와 목표
 
----
+양측은 원하는 거래를 자연어로 설명하고 싶지만, 구매자의 최대 지불 가격이나 판매자의 최소 수락 가격을 상대방에게 그대로 공개하고 싶지 않다. 앱은 두 intent를 실행 가능한 형식으로 바꾸고, 사용자가 승인한 조건에 묶인 검증 결과를 보여준다.
 
-## 1. One sentence
+MVP 성공 기준은 **“양측이 승인한 조건에 맞는 제안인지 Midnight에서 검증했다”**는 사실을 시연하는 것이다. 실제 결제나 자산 이전이 없다면 화면과 발표에서 “거래 완료”라고 부르지 않는다.
 
-A plant attests one period once. A buyer and a bank each post **their own
-ladder**. Midnight answers **which rung**. Nobody receives the workbook.
+## 3. MVP 범위
 
-## 2. Problem
+<!-- 변경: 기존 한 공장·한 검증 기간·구매자/은행의 배출 강도 구간 판정 → 한 상품, 구매자 1명과 판매자 1명, 가격 조건 1건의 거래 intent 검증. -->
 
-### 2.1 What is real
+### 포함
 
-Industrial plants already send a **fat book** to government (Korea: K-ETS
-statement with site, fuel, **production volume**, emissions). The public NGMS
-row is thin. Commercial counterparties are a third door.
+- 구매자와 판매자가 각각 자연어 intent를 입력한다.
+- AI가 각 입력을 공통 structured intent 형식으로 변환한다.
+- 사용자가 변환 결과를 확인·수정하고 명시적으로 승인한다.
+- Buyer Agent와 Seller Agent가 승인된 intent를 기반으로 하나의 거래 제안을 만든다.
+- 비공개 가격 조건을 만족한다는 proof를 생성하고 Midnight에서 검증한다.
+- 앱이 파싱 오류, 불일치, 증명 실패, 검증 실패, 검증 성공을 구분해 표시한다.
+- 성공·불일치·조작된 값에 대한 고정 데모 데이터를 제공한다.
+- 데모 참가자별 접근 권한을 분리해 상대방의 비공개 intent 조회를 막는다.
 
-Those counterparties will not take “we met the requirement.” Plants will not
-send activity data (`E` emissions, `P` production, recipe, utilization). When
-they do send a file, buyers waste time cleaning dirty, incomparable
-spreadsheets.
+### 제외
 
-The requirement is almost never a global A–E stamp. It is **the
-counterparty’s own scale**:
+- 실제 대금 결제, 토큰·상품 이전, 법적 계약 체결
+- 다수 사용자 매칭 시장, 복수 상품·분할 주문, 복잡한 경매
+- AI가 사용자 승인 없이 거래 조건을 확정하거나 수정하는 기능
+- 프로덕션 수준의 계정·권한 관리, 대화 전문 공개, 실거래 가격 데이터
 
-- **Track A — buyer / offtake:** a purchase spec. “Intensity ≤ my max, this
-  method, this period.” Two rungs: in spec / out of spec. Over the line is
-  off-spec (reject, discount, or no green premium).
-- **Track B — bank / SLL:** a facility grid. “Miss / mid / hit” on this loan’s
-  KPI (LMA/LSTA ratchets). Three or more rungs. Outcome is margin, not goods.
+## 4. 사용자와 시스템 역할
 
-A single cap is a ladder with two rungs. We design for the **ladder**.
-
-### 2.2 What we do not pretend
-
-- Counterparties do **not** price off NGMS. Government and commercial tracks
-  are parallel.
-- CSR / CBAM / many SLLs still need a **number** to add, tax, or put in an
-  assurance file. This product answers a **gate**, not a tax calculator.
-- Midnight does not measure. Unattested or wrong-method data is garbage in,
-  valid-looking proof. The verifier still looks once at the door.
-- Ports already run ESI / Green Award on **ships**. Out of hackathon scope.
-
-### 2.3 Unique value
-
-Not “we fit every domain.” The value is the **check**:
-
-> Custom ladder in. Rung out. No workbook. The hub never sees the tonnes.
-
-Midnight is why the hub is allowed to exist without becoming another data
-hostage. Domain travel (buyer and bank on one lock) is a property, not the
-pitch.
-
-## 3. Why Midnight
-
-A public chain or a normal portal can store a grade. It cannot let a third
-party **check a private pair** without seeing it.
-
-| Layer | Job | Midnight? |
+| 역할 | 행동 | 볼 수 있는 정보 |
 |---|---|---|
-| Measure | Meters, period totals | No — plant |
-| Attest | Verifier confirms `(E, P, method)` | No — human / auditor, then posts a hash |
-| Check | Does that lock sit in **this** request’s bands? | **Yes** |
-| Disclose | Only `band_id` or `none` | **Yes** |
+| Buyer | 구매 intent 확인·수정·승인 | 자신의 전체 intent, 상대방이 공개하기로 한 조건, 최종 검증 결과 |
+| Seller | 판매 intent 확인·수정·승인 | 자신의 전체 intent, 상대방이 공개하기로 한 조건, 최종 검증 결과 |
+| AI parser | 자연어를 정해진 형식으로 변환 | 파싱을 위해 전달된 원문 |
+| Buyer Agent / Seller Agent | 승인된 조건으로 제안·응답 | 전달받은 공개 조건과 허용된 협상 메시지 |
+| 증명 실행자 | 백엔드에서 비공개 witness로 proof 생성 | 양측의 승인된 가격 한도와 제안 |
+| Midnight | 제출된 proof와 공개 입력 검증 | 계약이 공개하도록 정한 값과 검증 결과 |
+| 백엔드 | AI 호출, 승인 버전 보관, 협상·증명 실행, UI용 결과 제공 | 양측 원문과 승인된 가격 한도 |
 
-Compact: no division. Intensity `E/P` in band `[L, H)` is
-`E * H_den >= L_num * P` and `E * H_den < H_num * P` with scaled integers
-(same as the earlier design note).
+## 5. 확정된 비공개 경계와 신뢰 가정
 
-If the request names method M and the lock was attested under method N, the
-circuit must fail. A yes on the wrong recipe is a lie.
+<!-- 변경: 기존 비공개 값 E(배출량), P(생산량), salt → 구매자 최대 가격과 판매자 최소 가격 및 각 조건의 nonce/salt. 기존의 구간 결과 band_id → 조건 충족 여부. -->
+<!-- 변경: AI 제공자·백엔드까지 비공개인 설계 가능성을 보류하던 상태 → MVP에서는 두 주체를 신뢰하고, 상대방과 공개 체인에 대한 비공개를 보장 범위로 확정. -->
 
-## 4. Scope
+- **MVP의 비공개 목표:** 구매자 최대 가격과 판매자 최소 가격을 거래 상대방, 상대 에이전트, 공개 ledger에 노출하지 않는다. 상품명·수량·통화는 공개 가능한 조건으로 취급한다.
+- **신뢰하는 처리 주체:** 앱 백엔드는 양측의 원문과 승인된 가격 한도를 받고, AI 제공자는 파싱을 위해 전달된 각 원문을 처리한다. 둘 모두 값을 볼 수 있으므로 “AI 제공자·운영자에게도 비공개”라고 주장하지 않는다.
+- **증명 위치:** 신뢰된 백엔드가 양측의 비공개 값을 이용해 proof를 만든다. proof server도 witness를 처리하므로 로컬 또는 팀이 통제하는 환경에서 운영한다.
+- **에이전트 격리:** Buyer Agent 요청에는 판매자의 최소 가격을, Seller Agent 요청에는 구매자의 최대 가격을 포함하지 않는다. 같은 백엔드 안에 있더라도 에이전트별 입력 객체를 분리한다.
+- **상대방 접근 차단:** 각 사용자는 자신의 전체 intent만 조회·수정할 수 있다. 상대방에게 주는 응답과 실행 상태에는 공개 조건·허용된 제안·검증 결과만 포함한다. 데모에도 최소한의 역할별 세션 또는 토큰 검사를 적용한다.
+- 비공개 값은 URL, 브라우저 영속 저장소, 일반 로그, 상대방 API 응답에 넣지 않는다. 데모에서 백엔드에 보관하는 원문·가격 한도의 삭제 시점도 정한다.
+- 공개 commitment가 작은 가격 범위를 추측하는 단서가 되지 않도록 충분한 nonce/salt를 사용한다. 정확한 commitment 구성과 저장 방식은 계약 담당자가 확정한다.
+- 제안에 대한 수락·거절 결과도 가격 한도의 단서가 될 수 있다. MVP에서는 intent별 제안을 한 번으로 제한하고 반복 조회·재시도로 한도를 탐색하지 못하게 한다.
+- 같은 AI 제공자를 양측이 사용하면 제공자는 각 요청을 처리할 수 있다. 에이전트 대화 분리만으로 제공자에 대한 비밀 보장이 생기지 않는다.
 
-### 4.1 In (hackathon)
+데이터 흐름:
 
-- One industrial plant (steel or similar) and one attested period.
-- Two requester types on the **same** lock: buyer (A) and bank (B).
-- Hybrid hub: compose request, grant access, read `band_id`.
-- Midnight: commitment `C`, request hash, grant, prove → `band_id`.
-- Fixtures: Plant A in-spec / bank hit; Plant B out / bank miss; fake opening
-  fails.
-- README: problem in one line, how to run, what is private, how Midnight is
-  used.
+~~~text
+Buyer/Seller 화면 → 백엔드 → AI 제공자: 각자 자연어 원문(가격 포함 가능)
+AI 제공자 → 백엔드 → 본인 화면: 구조화 intent 초안
+본인 화면 → 백엔드: 수정·승인한 intent와 가격 한도
+백엔드 → Buyer/Seller Agent: 역할별 공개 조건만 전달
+백엔드 → 통제된 proof server → Midnight: 비공개 witness로 증명, 공개 입력·proof 제출
+백엔드 → 상대방 화면: 가격 한도를 제외한 제안 요약·검증 결과
+~~~
 
-### 4.2 Out
+## 6. 사용자 흐름
 
-- K-ETS / NGMS replacement, KAU/KOC/KRX.
-- CBAM levy math, Scope 3 rollup.
-- Port / ship scores.
-- Live unaudited feeds, replacing Big-4 SLL assurance letters.
-- Global public A–E registry (LESS, IEA labels).
-- SME “we never measured” — fail closed.
+<!-- 변경: 기존 verifier lock → requester request → plant grant → proveBand → band_id 조회를 아래의 양측 intent 흐름으로 교체. -->
 
-### 4.3 Open (only after the core prove is green)
+1. Buyer와 Seller가 각자 자연어로 상품, 수량, 가격 조건을 입력한다.
+2. 백엔드가 각 원문을 AI API로 보내 structured intent로 변환한다. 해석이 불분명하거나 필수 값이 없으면 승인 전 수정하도록 한다.
+3. 각 사용자가 자신의 structured intent와 비공개로 표시된 필드를 확인·수정·승인한다.
+4. 백엔드가 승인된 버전을 고정하고, 에이전트 협상을 시작한다. 이후 수정은 새 버전과 새 승인으로 처리한다.
+5. 에이전트가 거래 제안 하나를 만들거나 제안 불가를 반환한다. 신뢰된 백엔드가 제안을 비공개 조건과 대조한다. 에이전트의 문장만으로 조건 충족을 확정하지 않는다. 반복적인 가격 탐색은 MVP에서 제외한다.
+6. 제안이 있으면 증명 실행자가 승인된 intent 및 제안에 묶인 proof를 생성한다.
+7. Midnight 계약 호출과 검증 결과를 확인한다.
+8. 앱이 검증된 조건 일치, 조건 불일치, proof 생성 실패, 체인 검증 실패를 구분해서 보여준다.
 
-- Preprod + hosted hub URL.
-- Extra disclosed field `scheme = intensity` (still no `E`/`P`).
-- More than two requesters on one lock.
+## 7. 공통 데이터 형식 초안
 
-## 5. Users and expected usage
+금액은 부동소수점 대신 통화의 최소 단위 정수로 다룬다. MVP가 KRW만 지원한다면 원 단위 정수를 사용한다. 필드명과 단위는 AI, 백엔드, 에이전트, 계약 담당자가 **같은 정의**를 사용해야 한다.
 
-| Actor | Does | Sees |
+~~~json
+{
+  "id": "intent_123",
+  "role": "buyer",
+  "itemId": "demo-item-1",
+  "quantity": 1,
+  "currency": "KRW",
+  "privatePriceLimitMinor": 1000000,
+  "status": "draft",
+  "version": 1
+}
+~~~
+
+- Buyer의 privatePriceLimitMinor는 **최대 구매 가격**, Seller에게는 **최소 판매 가격**을 뜻한다. 실제 구현에서는 의미 혼동을 막기 위해 역할별 필드명 또는 명시적 limitType을 사용할 수 있다.
+- 필수값: 역할, 상품, 수량, 통화, 가격 한도. AI가 모르는 값을 임의로 만들면 안 되며 사용자 확인을 받아야 한다.
+- 협상 제안에는 intent ID와 승인된 버전, 상품·수량, 합의 가격, 공개 범위를 포함한다.
+- 위 객체는 **백엔드 내부 및 본인 전용 초안**이다. 상대방 에이전트나 상대방 조회 API에 그대로 반환하지 않는다.
+
+## 8. 계약과 ZK 검증 요구사항
+
+<!-- 변경: 기존 E/P의 배출 강도 구간 계산과 band_id 공개 → 양측 승인된 가격 한도 및 제안 가격의 관계 검증. 아래는 계약 담당자에게 전달할 제품 요구사항이며 실제 Compact circuit 시그니처는 아니다. -->
+
+MVP 검증 명제의 예:
+
+~~~text
+buyerMaxPrice >= proposedPrice
+proposedPrice >= sellerMinPrice
+상품·수량·통화가 양측의 승인된 intent 및 제안과 일치한다
+~~~
+
+- proof는 **승인된 intent의 특정 버전**과 제안에 묶여야 한다. 승인 뒤 가격을 바꾸거나 다른 거래의 proof를 재사용한 경우 실패해야 한다.
+- 구매자 최대 가격과 판매자 최소 가격은 공개 ledger에 평문으로 기록하지 않는다.
+- 공개 결과의 최소 범위는 거래 식별자, 검증 성공 여부, 트랜잭션 참조다. 제안 가격을 공개할지 여부는 양측의 공개 범위 합의에 따른다.
+- “가격이 맞지 않음”과 “잘못된 witness/proof”는 서로 다른 결과로 모델링한다. Midnight 계약이 실패 거래를 ledger에 기록하는지, 단순히 트랜잭션을 거부하는지는 계약 담당자가 정하고 API에 반영한다.
+- ZK는 주어진 값 사이의 관계와 commitment 결합을 검증한다. AI가 자연어를 올바르게 해석했는지, 상품이 실제로 인도됐는지까지 증명하지 않는다.
+
+## 9. 화면
+
+<!-- 변경: 기존 /plant, /buyer, /bank의 배출 강도 확인 화면 → 구매·판매 intent 입력/승인 및 검증 진행 화면. -->
+
+| 경로 | 화면 | 필수 요소 |
 |---|---|---|
-| **Verifier** | Checks the period off-chain; posts `C = hash(E, P, salt, plantId, period, methodId)` | Real pair (once) |
-| **Plant** | Holds the same witness; grants who may request this `C`; runs prove | Own form (local) |
-| **Buyer (A)** | Files a 2-rung spec request; reads `in` or `none` | Rung only |
-| **Bank (B)** | Files a 3-rung SPT request; reads `miss` / `mid` / `hit` | Rung only |
-| **Hub** | Identity, request catalog, ACL UX | Request text, grants, result pointer — never witness |
-| **Midnight** | Stores `C`, request hash, grant, result | Not plain `E`/`P` |
+| /buyer | 구매 intent 입력·검토·승인 | 자연어 입력, 구조화 결과, 비공개 가격 표시, 수정·승인 |
+| /seller | 판매 intent 입력·검토·승인 | 자연어 입력, 구조화 결과, 비공개 가격 표시, 수정·승인 |
+| /execution/:id | 협상·증명·검증 진행 및 결과 | 단계별 상태, 공개 가능한 제안 요약, 결과·오류 |
 
-Happy path (one lock, two gates):
+해커톤 데모에서는 Buyer와 Seller를 별도 세션 또는 데모 토큰으로 구분한다. 화면의 역할 선택만으로는 상대방 데이터 접근을 막을 수 없으므로 백엔드에서도 조회 권한을 검사한다. 이는 프로덕션 계정 시스템을 뜻하지 않는다.
 
-1. Verifier and plant agree off-chain on Plant A, 2025, method `kets-intensity-v1`,
-   `E=120000`, `P=1000000` (scaled), salt.
-2. Verifier posts `C`. Status `locked`.
-3. Buyer posts request R_buy: bands `in = [0, 0.15)`, else out. Plant grants
-   buyer on this `C`. Prove → `in`.
-4. Bank posts request R_sll: `miss [0.18, ∞)`, `mid [0.15, 0.18)`,
-   `hit [0, 0.15)`. Plant grants bank. Prove → `hit`.
-5. Neither screen shows 120 or 1000.
+## 10. 백엔드 API 계약 초안
 
-Lie path: prove with `E=1`, `P=10000` → hash ≠ `C` → reject, no rung.
+<!-- 변경: 기존 hub의 request catalog/grant/band_id 조회 → 자연어 파싱, 양측 승인, 실행 상태 조회 인터페이스. -->
 
-Over-cap path: Plant B locked over the buyer’s `0.15` → buyer `none`, bank
-`miss`.
-
-## 6. Request object (always a ladder)
-
-```text
-VerifyRequest
-  requesterId
-  subject        plantId
-  period         e.g. 2025 or 2025Q1
-  methodId       must match the lock
-  bands[]        { id, lowNumer, lowDenom, highNumer, highDenom }  // [low, high)
-```
-
-- One cap = two conceptual rungs: the listed `in` band, and implicit `none`.
-- SLL grid = three (or more) explicit ids.
-- Response: `band_id` or `none`. Never `E`, `P`, or exact intensity.
-
-Access: prove is allowed only if the plant granted `(requesterId, C, requestHash)`.
-
-## 7. Architecture (hybrid hub)
-
-Recommended over “everything in Compact” (painful UX) and “hub-only”
-(another portal that sees or holds dirt).
-
-The editable board is the Excalidraw file above (three frames: shared
-architecture, Track A, Track B). Open it in the Cursor / VS Code Excalidraw
-extension, or drag it onto [excalidraw.com](https://excalidraw.com). GitHub
-renders the mermaid copies below.
-
-```text
-Verifier attests period  →  posts C on Midnight
-                                │
-Requester  →  Hub: create request (ladder + method + period)
-                                │
-Plant      →  Hub: grant this requester on this C
-                                │
-Prove      →  Midnight: witness + public (C, request hash)
-                                │
-Hub reads  →  band_id | none
-```
-
-```mermaid
-flowchart LR
-  plant["Plant — holds E, P, salt"]
-  verifier["Verifier — attests once"]
-  midnight["Midnight — C, grant, proveBand"]
-  hub["Hub — catalog and ACL"]
-  buyer["Buyer A — 2-rung spec"]
-  bank["Bank B — 3-rung SLL"]
-  verifier -->|"post C"| midnight
-  plant -->|"same witness"| verifier
-  plant -->|"grant + prove"| midnight
-  midnight -->|"band_id only"| hub
-  hub --> buyer
-  hub --> bank
-```
-
-```mermaid
-flowchart LR
-  lockA["1. Lock Plant A"] --> reqA["2. Buyer request in = 0 to 0.15"]
-  reqA --> grantA["3. Plant grant"]
-  grantA --> proveA["4. proveBand"]
-  proveA --> inA["5. band_id = in"]
-```
-
-```mermaid
-flowchart LR
-  lockB["0. Same C"] --> reqB["1. Bank miss / mid / hit"]
-  reqB --> grantB["2. Plant grant"]
-  grantB --> proveB["3. proveBand"]
-  proveB --> hitB["4. Margin cue"]
-```
-
-| Piece | Holds | Must not hold |
+| 호출 | 요청 | 응답 |
 |---|---|---|
-| Plant / verifier | `E`, `P`, salt, method notes | — |
-| Hub | Request JSON, ACL, result pointer | Witness |
-| Midnight | `C`, request hash, grant, `band_id` | Plain `E`, `P` |
+| POST /api/intents/parse | role, text | intentId, draft, warnings |
+| PUT /api/intents/:id | 수정한 draft, version | 최신 draft, version |
+| POST /api/intents/:id/approve | 승인할 version | intentId, approvedVersion |
+| POST /api/executions | buyerIntentId, sellerIntentId | executionId, status |
+| GET /api/executions/:id | 없음 | status, steps, publicProposal, verification, error |
 
-Circuits (units):
+- 파싱·수정·승인 API는 본인 세션에서만 호출한다. 본인에게는 자신의 가격 한도를 표시하되, 상대방의 privatePriceLimitMinor는 어떤 응답에서도 반환하지 않는다.
+- 백엔드의 AI API 호출은 원문을 포함한다. AI API 키는 백엔드에만 두고 화면에 전달하지 않는다.
+- 실행 조회 API는 양측에 동일한 공개 결과를 주거나 역할별 응답을 따로 만든다. 어느 경우든 원문·가격 한도·witness는 제외한다.
+- 실행 상태의 최소 구분: negotiating, no_match, proving, verifying, verified, proof_failed, verification_failed.
+- 실패 응답에는 기계가 읽을 errorCode와 화면에 표시할 안전한 message를 둔다. 원문 intent나 witness를 오류 메시지에 싣지 않는다.
+- 재시도 시 동일 실행이 중복 제출되지 않도록 executionId 또는 요청 식별자를 사용한다.
+- 이 표는 프런트엔드와 백엔드가 합의할 **초안**이다. 계약 구현의 실제 실패 형태에 맞춰 확정한다.
 
-- `lock` — verifier only. Store `C`, `methodId`, `status=locked`. No `E`/`P`.
-- `grant` — plant. Bind requester + request hash to this `C`.
-- `proveBand` — plant (or anyone with the opening, for the demo). Check
-  `hash == C`, method match, locate the unique band. `disclose(band_id)`.
-- Read is off-chain / hub: `{ plantId, period, requester, methodId, band_id }`.
+## 11. 제안 기술 구조와 팀 인계
 
-Error handling:
+| 영역 | MVP 제안 | 담당자가 확정해 전달할 것 |
+|---|---|---|
+| Frontend | React + TypeScript + Vite | 화면, API 호출, 상태 표시, 공개 범위 |
+| AI parser | 백엔드에서 호출하는 구조화 출력 지원 모델 | 모델/API 제공자, JSON 스키마, 미해석 입력 처리 |
+| Agents / Backend | Node.js + TypeScript의 단일 API | 역할별 입력 분리, 승인 버전 고정, 참가자별 조회 권한 |
+| Midnight | Compact 계약 + Midnight.js 연동 모듈 | 회로/함수명, 공개 입력, witness, 결과, 배포 주소 |
+| 실행 환경 | 우선 로컬 Midnight 네트워크와 로컬 proof server | 네트워크·indexer·proof server 주소, 지갑 설정 |
 
-- No lock / not granted / method mismatch / hash fail / `P = 0` → transaction
-  fails. No `band_id` written.
-- Overlapping bands in a request → reject at hub (invalid request), never
-  prove.
+Midnight 담당자는 컴파일된 TypeScript 연동 산출물, 호환되는 도구 버전, 배포 주소, 성공·실패 호출 예제와 예상 결과를 제공한다. 프런트엔드는 백엔드 API만 호출하며, proof server와 지갑 비밀값을 브라우저 설정에 넣지 않는다.
 
-## 8. Form (what we ship)
+## 12. 데모 시나리오와 완료 기준
 
-Three surfaces, no marketplace:
+1. **성공:** Buyer 최대 1,000,000원, Seller 최소 900,000원, 제안 950,000원. 양측 승인 버전과 상품·수량이 일치하고 검증 성공을 표시한다.
+2. **조건 불일치:** Buyer 최대 800,000원, Seller 최소 900,000원. 매칭 불가를 표시하며 검증 성공으로 처리하지 않는다.
+3. **조작 방지:** 승인 뒤 가격 또는 제안 내용을 바꾼 값으로 증명을 시도한다. 승인 버전/commitment 결합이 맞지 않아 검증 성공이 나오지 않는다.
+4. **시스템 오류:** proof server 중단 또는 Midnight 제출 실패를 조건 불일치와 다른 오류로 표시한다.
+5. **비공개 경계:** Seller 세션과 Seller Agent 입력에서 Buyer 최대 가격을 볼 수 없고, Buyer 쪽에서도 Seller 최소 가격을 볼 수 없다. 공개 체인 상태와 거래 결과에도 두 가격 한도가 평문으로 나타나지 않는다.
 
-| Route | Actor | Shows | Actions |
-|---|---|---|---|
-| `/plant` | Verifier + plant | Period, method, E, P, salt (local) | Lock, grant |
-| `/buyer` | Buyer | Their ladder, result rung | Create request A |
-| `/bank` | Bank | Their ladder, result rung | Create request B |
+데모 결과에는 검증된 조건의 의미와 트랜잭션 참조를 보여준다. 실제 결제·인도가 구현되지 않았다면 “조건 검증 성공”으로 표기한다.
 
-Copy on buyer and bank pages: **not shown** — emissions, production, exact
-intensity.
+## 13. 팀이 구현 전에 확정할 항목
 
-Local undeployed: Node 22, Docker, proof server `http://127.0.0.1:6300`.
+- 이 거래 intent 프로젝트가 기존 Caplock 방향을 대체하는 최종 제출 범위인지
+- 거래 제안 가격의 공개 범위와 양측의 최종 제안 승인 필요 여부
+- 계약의 정확한 공개 입력, witness, commitment 방식, 실패 결과와 배포 네트워크
+- 역할별 데모 세션·토큰 방식, 원문·가격 한도의 백엔드 보관 및 삭제 시점
+- 각 모듈 담당자, JSON 형식과 정수 단위, 데모 실행 순서
 
-## 9. Hackathon success
-
-Judges can run: lock A → buyer `in` + bank `hit`; fake numbers fail; lock B →
-buyer `none` + bank `miss`. README states the ministry still gets the
-statement; counterparties get a rung.
-
-## 10. Fixtures
-
-| Plant | E (scaled tCO2e) | P (scaled t) | Buyer cap 0.15 | Bank miss ≥ 0.18 / mid / hit [0, 0.15) |
-|---|---|---|---|---|
-| A | 120000 | 1000000 | `in` (0.12) | `hit` (below 0.15) |
-| B | 200000 | 1000000 | `none` (0.20) | `miss` (at or above 0.18) |
-
-## 11. Sources (desk research, not interviews)
-
-- K-ETS statement includes production; NGMS public row is thinner
-  ([IEEJ](https://eneken.ieej.or.jp/data/11487.pdf),
-  [시행령 제39조](https://govbrief.kr/scan/011712/39/),
-  [탄소중립기본법 시행령 제23조](https://govbrief.kr/scan/014255/23/)).
-- Scope 3 / PCF sharing blocked by trade secrets
-  ([npj Climate Action](https://www.nature.com/articles/s44168-023-00032-x)).
-- Buyer offtake: max intensity as a product spec
-  ([OIES hydrogen offtake](https://www.oxfordenergy.org/wpcms/wp-content/uploads/2025/08/ET50-Hydrogen-Offtake-Agreements.pdf),
-  [SSBP near-zero cap](https://rmi.org/news/amazon-and-johnson-controls-join-major-corporations-in-launching-tender-to-accelerate-deployment-of-near-zero-emissions-steel/)).
-- SLL: annual (or trigger-date) verification; LMA count-of-SPTs and LSTA
-  blended target/threshold grids
-  ([SLLP](https://www.lma.eu.com/application/files/2317/4481/8026/Sustainability-Linked_Loan_Principles_-_26_March_2025_.pdf),
-  [Hogan Lovells](https://www.hlc.com/en/publications/slls-recent-oversight-developments-and-comparing-the-lma-lsta-and-aplma-approaches)).
-- Existing portals share a **number** under contract (TfS, Catena-X, SiGREEN),
-  not a hub-blind rung.
+비공개 목표와 신뢰 주체는 5절의 확정 방침을 따른다. 나머지 항목을 확정한 뒤 API 예시와 계약 인터페이스를 고정한다. 변경 시 이 문서와 구현을 함께 갱신한다.

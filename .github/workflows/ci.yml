@@ -2,11 +2,19 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
   push:
-    branches: [main]
+    branches: [dev, main]
 
 jobs:
+  branch-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only dev may target main
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: test "$HEAD_REF" = "dev"
+
   check:
     runs-on: ubuntu-latest
     steps:
@@ -14,6 +22,17 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+      - name: Install Compact toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Compact update
+        run: |
+          compact update 0.31.1
+          compact compile --language-version
+          compact compile --runtime-version
+          test "$(compact compile --language-version)" = "0.23.0"
+          test "$(compact compile --runtime-version)" = "0.16.0"
       - name: Env templates present
         run: |
           test -f .env.example

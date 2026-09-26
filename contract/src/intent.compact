@@ -1,0 +1,75 @@
+pragma language_version >= 0.23.0;
+
+import CompactStandardLibrary;
+
+export enum Currency { KRW }
+export enum OfferStatus { Verified }
+
+export ledger rangeIntentId: Bytes<32>;
+export ledger rangeItemId: Bytes<32>;
+export ledger rangeQuantity: Uint<32>;
+export ledger rangeVersion: Uint<32>;
+export ledger rangeCommitmentValue: Bytes<32>;
+export ledger hasRange: Boolean;
+export ledger offerIntentId: Bytes<32>;
+export ledger offerCommitmentValue: Bytes<32>;
+export ledger hasOffer: Boolean;
+
+export circuit rangeCommitment(
+  priceMax: Uint<64>,
+  sourceId: Bytes<32>,
+  dateMax: Uint<32>,
+  salt: Bytes<32>
+): Bytes<32> {
+  return disclose(persistentCommit<Uint<64>>(priceMax, salt));
+}
+
+export circuit offerCommitment(
+  offerPrice: Uint<64>,
+  offerSource: Bytes<32>,
+  offerDate: Uint<32>,
+  offerSalt: Bytes<32>
+): Bytes<32> {
+  return disclose(persistentCommit<Uint<64>>(offerPrice, offerSalt));
+}
+
+export circuit commitRange(
+  intentId: Bytes<32>,
+  itemId: Bytes<32>,
+  quantity: Uint<32>,
+  version: Uint<32>,
+  commitment: Bytes<32>
+): [] {
+  assert(quantity > 0, "quantity must be positive");
+  const id = disclose(intentId);
+  assert(!hasRange, "intent already committed");
+  rangeIntentId = id;
+  rangeItemId = disclose(itemId);
+  rangeQuantity = disclose(quantity);
+  rangeVersion = disclose(version);
+  rangeCommitmentValue = disclose(commitment);
+  hasRange = true;
+}
+
+export circuit commitVerify(
+  intentId: Bytes<32>,
+  priceMax: Uint<64>,
+  salt: Bytes<32>,
+  offerPrice: Uint<64>,
+  offerCommitment: Bytes<32>
+): [] {
+  const id = disclose(intentId);
+  assert(hasRange, "range missing");
+
+  assert(rangeIntentId == id, "range missing");
+  assert(
+    rangeCommitment(priceMax, default<Bytes<32>>, 0, salt) == rangeCommitmentValue,
+    "range does not open"
+  );
+  assert(offerPrice > 0, "offer must be positive");
+  assert(offerPrice <= priceMax, "offer above buyer limit");
+  assert(!hasOffer, "intent already verified");
+  offerIntentId = id;
+  offerCommitmentValue = disclose(offerCommitment);
+  hasOffer = true;
+}
