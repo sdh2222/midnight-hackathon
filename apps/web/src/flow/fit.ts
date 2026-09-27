@@ -1,6 +1,6 @@
 import type { Offer } from "@midnight-hackathon/shared";
 
-export type Fit = "fits" | "over-cap" | "date";
+export type Fit = "fits" | "over-cap" | "date" | "late";
 
 // Same rule the previous compare screen used. This is not a ranker.
 export function offerFit(
@@ -9,6 +9,7 @@ export function offerFit(
   requiredBy: string,
 ): Fit {
   if (Number(offer.convertedTotalKrw) > capKrw) return "over-cap";
-  if (requiredBy && !(offer.deliveryDate && offer.deliveryDate <= requiredBy)) return "date";
+  if (requiredBy && !offer.deliveryDate) return "date";
+  if (requiredBy && offer.deliveryDate && offer.deliveryDate > requiredBy) return "late";
   return "fits";
 }

@@ -11,7 +11,7 @@ describe("offerFit", () => {
   });
 
   it("rejects a delivery after the needed-by date", () => {
-    expect(offerFit({ convertedTotalKrw: "1000", deliveryDate: "2026-12-01" }, 2_700_000, "2026-10-01")).toBe("date");
+    expect(offerFit({ convertedTotalKrw: "1000", deliveryDate: "2026-12-01" }, 2_700_000, "2026-10-01")).toBe("late");
   });
 
   it("rejects a missing delivery date when a needed-by date was set", () => {

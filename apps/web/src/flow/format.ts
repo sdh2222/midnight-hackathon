@@ -26,7 +26,8 @@ export function percent(value: number): string {
 export const FIT_WORD = {
   fits: "Within cap",
   "over-cap": "Over cap",
-  date: "Date missing",
+  date: "No delivery date",
+  late: "After your date",
 } as const;
 
 export const SORT_WORD: Record<string, string> = {

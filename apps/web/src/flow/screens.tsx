@@ -607,6 +607,9 @@ export function SortPage({
           <button className="v-link" type="button" onClick={onEdit}>Edit the buy</button>
           <button className="v-btn" type="button" disabled={selectedFit !== "fits"} onClick={onVerify}>Verify this row</button>
         </div>
+        {fits === 0 && requiredBy ? (
+          <p className="v-note bad">Nothing moved to Midnight. No row arrives by {requiredBy}, or the total is over the budget.</p>
+        ) : null}
         {selectedFit && selectedFit !== "fits" ? (
           <p className="v-note bad">{FIT_WORD[selectedFit]}. Pick a row that fits before verifying.</p>
         ) : null}
