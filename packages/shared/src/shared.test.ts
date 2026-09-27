@@ -4,7 +4,10 @@ import {
   IntentSplitSchema,
   OfferSchema,
   PublicRequirementSchema,
+  ZERO_BYTES_32,
   canonicalOfferJson,
+  dateToUnixDay,
+  hashToBytes,
   offerSnapshotHash,
 } from "./index.js";
 
@@ -85,6 +88,19 @@ describe("offer snapshot", () => {
   it("changes when an approved term changes", async () => {
     const changed = { ...offer, convertedTotalKrw: "1620001" };
     expect(await offerSnapshotHash(changed)).not.toBe(await offerSnapshotHash(offer));
+  });
+});
+
+describe("commit field mapping", () => {
+  it("hashes text to 32 bytes and treats a missing date as unconstrained", async () => {
+    expect(ZERO_BYTES_32).toEqual(new Uint8Array(32));
+    expect(await hashToBytes("industrial nitrile gloves")).toHaveLength(32);
+    expect(dateToUnixDay(undefined)).toBe(0n);
+    expect(dateToUnixDay("2026-10-15")).toBe(20_741n);
+  });
+
+  it("rejects a date that is not a calendar day", () => {
+    expect(() => dateToUnixDay("not-a-date")).toThrow("Invalid date value");
   });
 });
 

@@ -1,3 +1,4 @@
+export * from "./midnight/commit-fields.js";
 export * from "./hashing/canonical-json.js";
 export * from "./hashing/offer-snapshot.js";
 export * from "./hashing/sha256.js";

@@ -12,7 +12,7 @@
     "start": "node dist/index.js",
     "pretypecheck": "npm run build --workspace @midnight-hackathon/shared",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "pretest": "npm run build --workspace @midnight-hackathon/shared",
+    "pretest": "npm run build --workspace @midnight-hackathon/shared && npm run compact --workspace @midnight-hackathon/intent-contract",
     "test": "vitest run"
   },
   "dependencies": {
@@ -24,6 +24,7 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
+    "@midnight-hackathon/intent-contract": "0.1.0",
     "@types/node": "^22.15.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
