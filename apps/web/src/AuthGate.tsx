@@ -1,50 +1,12 @@
 import { PrivyProvider, usePrivy } from "@privy-io/react-auth";
 import { useMemo } from "react";
 import { App } from "./App";
+import { Landing } from "./flow/landing";
 
 const appId = import.meta.env.VITE_PRIVY_APP_ID?.trim();
 
 function LoginScreen({ login, loading = false }: { login?: () => void; loading?: boolean }) {
-  return (
-    <div className="landing">
-      <header className="landing-top">
-        <span className="mark"><span className="mark-water">source</span>night</span>
-        <nav className="landing-nav" aria-label="Sourcenight">
-          <a href="#how">How a buy runs</a>
-        </nav>
-      </header>
-      <section className="hero">
-        <div className="hero-sky" aria-hidden="true" />
-        <div className="hero-copy">
-          <h1>Stop pasting suppliers into a sheet.</h1>
-          <p className="hero-via">via Jev and Midnight</p>
-          <div className="hero-actions">
-            {login ? (
-              <button className="hero-button" type="button" onClick={login} disabled={loading}>
-                {loading ? "Checking the session" : "Open Sourcenight"}
-              </button>
-            ) : (
-              <p>Set <code>VITE_PRIVY_APP_ID</code> in the root <code>.env</code> before signing in.</p>
-            )}
-            <a className="hero-link" href="#how">How a buy runs</a>
-          </div>
-        </div>
-      </section>
-      <section className="landing-section" id="how">
-        <h2>One buy. One sorted list. One checked row.</h2>
-        <div className="landing-grid">
-          <ol className="landing-steps">
-            <li><strong>You enter the buy.</strong><span>Item, quantity, keywords, and a cap. The cap stays in this browser.</span></li>
-            <li><strong>Jev sorts the offers.</strong><span>It turns the public buy into a search and returns the list ranked.</span></li>
-            <li><strong>Midnight checks the row you keep.</strong><span>The proof says whether that row fits the cap. Nothing else is revealed.</span></li>
-          </ol>
-          <p className="landing-body">
-            Searching each supplier and copying the row into a spreadsheet is the slow part. A buyer still types the item, the quantity, the keywords, and a cap. Sourcenight sends the public fields to Jev, which returns one ordered list. The cap never leaves the browser: it is locked with commitRange before the search, and commitVerify later checks that the row you keep fits it. You sign in with email or a social account. Privy checks the account. The page does not ask for a wallet seed, and it does not ask you to connect a Lace wallet.
-          </p>
-        </div>
-      </section>
-    </div>
-  );
+  return <Landing login={login} loading={loading} />;
 }
 
 function AuthenticatedWorkspace() {

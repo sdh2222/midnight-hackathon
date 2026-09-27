@@ -30,7 +30,7 @@ Past buys sits beside the account. It is not a sixth step.
 
 | Page | Job | Primary button | Goes to |
 | --- | --- | --- | --- |
-| Sign in | Privy email, Google, or Apple | Continue with email or social | Onboard |
+| Sign in | The landing: how a buy runs, which fields leave the browser, what each column means, then Privy | Open Sourcenight | Onboard |
 | Onboard | Say what the next three pages will do, and show the Midnight address | Continue | Input |
 | Input | Public buy, plus a cap that stays in the browser | Sort offers | Sort, after the cap is locked and Jev returns |
 | Sort | The ranked rows, already ordered by the existing search | Verify this row | Verify |
