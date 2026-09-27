@@ -429,15 +429,39 @@ button:disabled {
   border-top: 3px solid var(--water);
 }
 
+.field-card {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+  padding: 8px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  cursor: grab;
+}
+
+.field-index {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--water);
+}
+
 .field-chip,
 .rank-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   width: 100%;
+  min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--line);
   background: var(--paper);
   text-align: left;
+}
+
+.rank-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .rank-row.selected {

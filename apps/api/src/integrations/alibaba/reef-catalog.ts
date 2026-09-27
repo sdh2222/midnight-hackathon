@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type { PublicRequirement, SearchPlan } from "@midnight-hackathon/shared";
 import type { CatalogProvider, RawCatalogListing } from "./catalog-provider.js";
@@ -46,6 +48,14 @@ function upperPriceMinor(value: number): string {
   return cents.toString();
 }
 
+const localReefKeyFile = fileURLToPath(new URL("../../../../web/.local/reef-key", import.meta.url));
+
+export function localReefKey(): string | undefined {
+  if (!existsSync(localReefKeyFile)) return undefined;
+  const stored = readFileSync(localReefKeyFile, "utf8").trim();
+  return stored.length > 0 ? stored : undefined;
+}
+
 export class ReefCatalogError extends Error {
   constructor(message: string, readonly code: string) {
     super(message);
@@ -67,7 +77,7 @@ export class ReefAlibabaCatalog implements CatalogProvider {
     try {
       response = await this.fetchImplementation(this.endpoint, {
         method: "POST",
-        headers: { "x-api-key": this.apiKey, "content-type": "application/json" },
+        headers: { "x-api-key": localReefKey() ?? this.apiKey, "content-type": "application/json" },
         body: JSON.stringify({
           query: plan.query,
           page: 1,

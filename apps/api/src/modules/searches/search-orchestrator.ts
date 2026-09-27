@@ -5,6 +5,7 @@ import {
   type SearchResponse,
 } from "@midnight-hackathon/shared";
 import type { CatalogProvider } from "../../integrations/alibaba/catalog-provider.js";
+import { localReefKey, ReefAlibabaCatalog } from "../../integrations/alibaba/reef-catalog.js";
 import type { JevProvider, SearchPlanCandidates } from "../../integrations/jev/jev-provider.js";
 import { mapCatalogListingToOffer } from "../offers/offer-mapper.js";
 
@@ -62,13 +63,19 @@ function buildCandidates(requirement: PublicRequirement): SearchPlanCandidates {
 export class SearchOrchestrator {
   constructor(private readonly dependencies: SearchOrchestratorDependencies) {}
 
+  private catalog(): CatalogProvider {
+    const key = localReefKey();
+    if (key) return new ReefAlibabaCatalog(key);
+    return this.dependencies.catalog;
+  }
+
   async search(request: SearchRequest): Promise<SearchResponse> {
     const searchedAt = this.dependencies.now();
     const plan = await this.dependencies.jev.chooseSearchPlan(
       request.publicRequirement,
       buildCandidates(request.publicRequirement),
     );
-    const listings = await this.dependencies.catalog.search(plan, request.publicRequirement);
+    const listings = await this.catalog().search(plan, request.publicRequirement);
     const offers = await Promise.all(
       listings.map((listing) =>
         mapCatalogListingToOffer(listing, request.publicRequirement, {
@@ -103,7 +110,7 @@ export class SearchOrchestrator {
     emit({ type: "queries", queries: ordered });
     const seen = new Set<string>();
     for (const query of ordered) {
-      const listings = await this.dependencies.catalog.search(
+      const listings = await this.catalog().search(
         { query, country: "ALL", sort: "relevance" },
         request.publicRequirement,
       );

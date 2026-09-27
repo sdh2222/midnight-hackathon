@@ -153,17 +153,21 @@ export function OnboardPage({
   walletAddress,
   creatingWallet,
   jevKeyStored,
+  reefKeyStored,
   error,
   onCreateWallet,
   onSaveJevKey,
+  onSaveReefKey,
   onContinue,
 }: {
   walletAddress: string | null;
   creatingWallet: boolean;
   jevKeyStored: boolean;
+  reefKeyStored: boolean;
   error: string | null;
   onCreateWallet: () => void;
   onSaveJevKey: (apiKey: string) => void;
+  onSaveReefKey: (apiKey: string) => void;
   onContinue: () => void;
 }) {
   return (
@@ -185,7 +189,7 @@ export function OnboardPage({
       <Card title="We will">
         <ol className="v-list">
           <li>Create the wallet when you press the button.</li>
-          <li>Take the Jev key once and keep it on this machine, not on screen.</li>
+          <li>Take the Jev key and the Reef key once and keep them on this machine, not on screen.</li>
           <li>Let you drag the buy fields. Order is priority. One side is public, the other stays private.</li>
           <li>Send only the public side to Jev with one fixed prompt: make the search queries.</li>
           <li>Query with those terms. As each page arrives, Jev ranks it, the mapper maps it, and Midnight checks it against the private fields.</li>
@@ -195,7 +199,7 @@ export function OnboardPage({
       <Card
         title="Midnight wallet"
         footer={walletAddress ? (
-          <button className="v-btn" type="button" disabled={!jevKeyStored} onClick={onContinue}>Continue</button>
+          <button className="v-btn" type="button" disabled={!jevKeyStored || !reefKeyStored} onClick={onContinue}>Continue</button>
         ) : (
           <button className="v-btn" type="button" disabled={creatingWallet} onClick={onCreateWallet}>
             {creatingWallet ? "Creating the wallet" : "Create wallet"}
@@ -210,19 +214,78 @@ export function OnboardPage({
         {error ? <p className="v-note bad" role="alert">{error}</p> : null}
       </Card>
       {walletAddress ? (
-        <JevKeyCard stored={jevKeyStored} onSave={onSaveJevKey} />
+        <>
+          <JevKeyCard stored={jevKeyStored} onSave={onSaveJevKey} />
+          <SecretKeyCard
+            title="Reef key"
+            label="ReefAPI key for the catalog"
+            stored={reefKeyStored}
+            onSave={onSaveReefKey}
+          />
+        </>
       ) : null}
     </>
   );
 }
 
 function FieldBoard({
+  form,
+  locked,
   columns,
+  onChange,
   onPlace,
 }: {
+  form: IntentForm;
+  locked: boolean;
   columns: { publicIds: BuyFieldId[]; privateIds: BuyFieldId[] };
+  onChange: (field: keyof IntentForm, value: string) => void;
   onPlace: (id: BuyFieldId, side: "public" | "private", index: number) => void;
 }) {
+  const control = (id: BuyFieldId) => {
+    if (id === "item") {
+      return <input className="v-input" value={form.item} onChange={(event) => onChange("item", event.target.value)} disabled={locked} required />;
+    }
+    if (id === "quantity") {
+      return <input className="v-input" type="number" min="1" value={form.quantity} onChange={(event) => onChange("quantity", event.target.value)} disabled={locked} required />;
+    }
+    if (id === "unit") {
+      return (
+        <select className="v-input" value={form.unit} onChange={(event) => onChange("unit", event.target.value)} disabled={locked}>
+          <option value="piece">piece</option>
+          <option value="pair">pair</option>
+          <option value="box">box</option>
+          <option value="kg">kg</option>
+        </select>
+      );
+    }
+    if (id === "destination") {
+      return (
+        <select className="v-input" value={form.destinationCountry} onChange={(event) => onChange("destinationCountry", event.target.value)} disabled={locked}>
+          <option value="KR">Korea</option>
+          <option value="US">United States</option>
+          <option value="JP">Japan</option>
+          <option value="SG">Singapore</option>
+        </select>
+      );
+    }
+    if (id === "keywords") {
+      return <input className="v-input" value={form.keywords} onChange={(event) => onChange("keywords", event.target.value)} disabled={locked} required />;
+    }
+    if (id === "neededBy") {
+      return <input className="v-input" type="date" value={form.requiredBy} onChange={(event) => onChange("requiredBy", event.target.value)} disabled={locked} />;
+    }
+    return (
+      <input
+        className="v-input"
+        aria-label="Maximum budget in KRW"
+        type="number"
+        min="1"
+        value={form.priceMaxKrw}
+        onChange={(event) => onChange("priceMaxKrw", event.target.value)}
+        disabled={locked}
+      />
+    );
+  };
   const column = (side: "public" | "private", ids: BuyFieldId[]) => (
     <div
       className={side === "private" ? "field-column private" : "field-column"}
@@ -232,13 +295,12 @@ function FieldBoard({
         onPlace(event.dataTransfer.getData("text/plain") as BuyFieldId, side, ids.length);
       }}
     >
-      <p className={side === "private" ? "v-kicker keep" : "v-kicker"}>{side === "public" ? "Public" : "Private"}</p>
+      <p className={side === "private" ? "v-kicker keep" : "v-kicker"}>{side === "public" ? "Public, sent to Jev" : "Private, stays here"}</p>
       {ids.map((id, index) => (
-        <button
+        <div
           key={id}
-          className="field-chip"
-          type="button"
-          draggable
+          className="field-card"
+          draggable={!locked}
           onDragStart={(event) => event.dataTransfer.setData("text/plain", id)}
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => {
@@ -247,8 +309,12 @@ function FieldBoard({
             onPlace(event.dataTransfer.getData("text/plain") as BuyFieldId, side, index);
           }}
         >
-          {index + 1}. {FIELD_LABEL[id]}
-        </button>
+          <span className="field-index">{index + 1}</span>
+          <label className="v-field">
+            <span>{FIELD_LABEL[id]}</span>
+            {control(id)}
+          </label>
+        </div>
       ))}
     </div>
   );
@@ -261,26 +327,51 @@ function FieldBoard({
 }
 
 function JevKeyCard({ stored, onSave }: { stored: boolean; onSave: (apiKey: string) => void }) {
-  const [draft, setDraft] = useState("");
   return (
-    <Card title="Jev key">
-      {stored ? (
-        <p className="v-desc">Stored on this machine. It is not shown again.</p>
-      ) : (
+    <SecretKeyCard title="Jev key" label="TypeSafe key for Jev" stored={stored} onSave={onSave} />
+  );
+}
+
+function SecretKeyCard({
+  title,
+  label,
+  stored,
+  onSave,
+}: {
+  title: string;
+  label: string;
+  stored: boolean;
+  onSave: (apiKey: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [replacing, setReplacing] = useState(false);
+  const showForm = !stored || replacing;
+  return (
+    <Card title={title}>
+      {stored && !replacing ? (
+        <div className="v-fields">
+          <p className="v-desc">Stored on this machine. It is not shown.</p>
+          <button className="v-btn" type="button" onClick={() => setReplacing(true)}>Enter the key again</button>
+        </div>
+      ) : null}
+      {showForm ? (
         <form className="v-fields" onSubmit={(event) => {
           event.preventDefault();
           const apiKey = draft.trim();
           if (!apiKey) return;
           onSave(apiKey);
           setDraft("");
+          setReplacing(false);
         }}>
           <label className="v-field">
-            <span>TypeSafe key for Jev</span>
+            <span>{label}</span>
             <input className="v-input" type="password" autoComplete="off" value={draft} onChange={(event) => setDraft(event.target.value)} />
           </label>
-          <button className="v-btn" type="submit" disabled={draft.trim().length === 0}>Store the key</button>
+          <button className="v-btn" type="submit" disabled={draft.trim().length === 0}>
+            {stored ? "Replace the key" : "Store the key"}
+          </button>
         </form>
-      )}
+      ) : null}
     </Card>
   );
 }
@@ -310,75 +401,20 @@ export function InputPage({
     <>
       <PageHead
         title="What are you buying?"
-        description="Jev gets the buy. The budget stays here."
+        description="Drag a field to the other side, or up and down. Public goes to Jev. Private stays here. The number is the priority."
       />
       <form onSubmit={(event) => onSubmit(event, columns.publicIds)}>
         <FieldBoard
+          form={form}
+          locked={locked}
           columns={columns}
+          onChange={onChange}
           onPlace={(id, side, index) => setColumns((current) => placeField(current, id, side, index))}
         />
-        <Card
-          title="This buy"
-          footer={<button className="v-btn" type="submit" disabled={searching}>{button}</button>}
-        >
-          <div className="v-fields">
-            <p className="v-kicker">Sent to Jev</p>
-            <label className="v-field">
-              <span>Item</span>
-              <input className="v-input" value={form.item} onChange={(event) => onChange("item", event.target.value)} disabled={locked} required />
-            </label>
-            <div className="v-split">
-              <label className="v-field">
-                <span>Quantity</span>
-                <input className="v-input" type="number" min="1" value={form.quantity} onChange={(event) => onChange("quantity", event.target.value)} disabled={locked} required />
-              </label>
-              <label className="v-field">
-                <span>Unit</span>
-                <select className="v-input" value={form.unit} onChange={(event) => onChange("unit", event.target.value)} disabled={locked}>
-                  <option value="piece">piece</option>
-                  <option value="pair">pair</option>
-                  <option value="box">box</option>
-                  <option value="kg">kg</option>
-                </select>
-              </label>
-              <label className="v-field">
-                <span>Ship to</span>
-                <select className="v-input" value={form.destinationCountry} onChange={(event) => onChange("destinationCountry", event.target.value)} disabled={locked}>
-                  <option value="KR">Korea</option>
-                  <option value="US">United States</option>
-                  <option value="JP">Japan</option>
-                  <option value="SG">Singapore</option>
-                </select>
-              </label>
-            </div>
-            <div className="v-split two">
-              <label className="v-field">
-                <span>Keywords</span>
-                <input className="v-input" value={form.keywords} onChange={(event) => onChange("keywords", event.target.value)} disabled={locked} required />
-              </label>
-              <label className="v-field">
-                <span>Needed by</span>
-                <input className="v-input" type="date" value={form.requiredBy} onChange={(event) => onChange("requiredBy", event.target.value)} disabled={locked} />
-              </label>
-            </div>
-            <div className="v-private">
-              <p className="v-kicker keep">Stays here</p>
-              <label className="v-field">
-                <span>Maximum budget, KRW</span>
-                <input
-                  className="v-input"
-                  aria-label="Maximum budget in KRW"
-                  type="number"
-                  min="1"
-                  value={form.priceMaxKrw}
-                  onChange={(event) => onChange("priceMaxKrw", event.target.value)}
-                  disabled={locked}
-                />
-              </label>
-            </div>
-            {error ? <p className="v-note bad" role="alert">{error}</p> : null}
-          </div>
-        </Card>
+        {error ? <p className="v-note bad" role="alert">{error}</p> : null}
+        <div className="hero-actions">
+          <button className="v-btn" type="submit" disabled={searching}>{button}</button>
+        </div>
       </form>
     </>
   );
@@ -567,29 +603,10 @@ export function SortPage({
             <Metric label="Sort time" value={elapsedMs == null ? "—" : seconds(elapsedMs)} hint="" />
           </div>
         </Card>
-        <Card
-          title="Jev"
-          flush
-          footer={(
-            <>
-              <button className="v-link" type="button" onClick={onEdit}>Edit the buy</button>
-              <button className="v-btn" type="button" disabled={selectedFit !== "fits"} onClick={onVerify}>Verify this row</button>
-            </>
-          )}
-        >
-          {result.offers.length === 0 ? (
-            <div className="v-card-body"><p>No offers came back. Edit the buy and sort again.</p></div>
-          ) : (
-            <OfferRows
-              offers={result.offers}
-              capKrw={capKrw}
-              requiredBy={requiredBy}
-              selectedId={selectedId}
-              onSelect={onSelect}
-              settle
-            />
-          )}
-        </Card>
+        <div className="hero-actions">
+          <button className="v-link" type="button" onClick={onEdit}>Edit the buy</button>
+          <button className="v-btn" type="button" disabled={selectedFit !== "fits"} onClick={onVerify}>Verify this row</button>
+        </div>
         {selectedFit && selectedFit !== "fits" ? (
           <p className="v-note bad">{FIT_WORD[selectedFit]}. Pick a row that fits before verifying.</p>
         ) : null}
