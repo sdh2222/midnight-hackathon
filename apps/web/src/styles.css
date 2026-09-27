@@ -160,7 +160,7 @@ button:disabled { cursor: not-allowed; }
   letter-spacing: -0.04em;
 }
 
-.v-desc { margin: 0; color: var(--muted); max-width: 68ch; }
+.v-desc { margin: 0; max-width: 78ch; color: var(--muted); line-height: 22px; }
 
 .v-card {
   background: var(--paper);
@@ -201,7 +201,7 @@ button:disabled { cursor: not-allowed; }
   border-top: 1px solid var(--line);
 }
 
-.v-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.v-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 .v-metric {
   display: flex;
@@ -221,6 +221,8 @@ button:disabled { cursor: not-allowed; }
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
 }
+
+.v-hint { font-size: 13px; line-height: 18px; color: var(--muted); }
 
 .v-table-wrap { overflow-x: auto; }
 
@@ -348,14 +350,24 @@ button:disabled { cursor: not-allowed; }
 
 .wizard {
   display: grid;
-  grid-template-columns: minmax(220px, 3fr) minmax(0, 9fr);
+  grid-template-columns: minmax(200px, 2.4fr) minmax(0, 5.6fr) minmax(240px, 4fr);
   gap: 24px;
   align-items: start;
 }
 
-.step-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.step-list li { display: flex; gap: 12px; color: var(--muted); }
-.step-list li[data-state="current"] { color: var(--ink); font-weight: 500; }
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.step-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+.step-list li { display: flex; gap: 12px; color: var(--muted); align-items: flex-start; }
+.step-list li[data-state="current"] { color: var(--ink); }
+.step-copy { display: flex; flex-direction: column; gap: 2px; }
+.step-copy strong { font-weight: 500; color: var(--ink); }
+.step-copy span { font-weight: 400; }
 .step-no {
   display: inline-flex;
   align-items: center;
@@ -489,7 +501,7 @@ button:disabled { cursor: not-allowed; }
 @media (max-width: 900px) {
   .desk-top, .desk-pages, .landing-top, .frame, .landing-section { padding-inline: 16px; }
   .desk-end { margin-left: 0; }
-  .wizard, .landing-grid, .v-metrics, .v-split, .v-split.two, .v-dl { grid-template-columns: 1fr; }
+  .wizard, .pair, .landing-grid, .v-metrics, .v-split, .v-split.two, .v-dl { grid-template-columns: 1fr; }
   .v-metric + .v-metric { border-left: 0; border-top: 1px solid var(--line); }
   .hero { min-height: auto; padding-top: 48px; }
 }

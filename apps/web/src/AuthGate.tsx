@@ -39,7 +39,7 @@ function LoginScreen({ login, loading = false }: { login?: () => void; loading?:
             <li><strong>Midnight checks the row you keep.</strong><span>The proof says whether that row fits the cap. Nothing else is revealed.</span></li>
           </ol>
           <p className="landing-body">
-            Searching each supplier and copying the row into a spreadsheet is the slow part. Sourcenight does that pass once. You sign in with email or a social account. Privy checks the account. The page does not ask for a wallet seed.
+            Searching each supplier and copying the row into a spreadsheet is the slow part. A buyer still types the item, the quantity, the keywords, and a cap. Sourcenight sends the public fields to Jev, which returns one ordered list. The cap never leaves the browser: it is locked with commitRange before the search, and commitVerify later checks that the row you keep fits it. You sign in with email or a social account. Privy checks the account. The page does not ask for a wallet seed, and it does not ask you to connect a Lace wallet.
           </p>
         </div>
       </section>

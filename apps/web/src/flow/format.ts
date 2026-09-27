@@ -19,6 +19,10 @@ export function seconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+export function percent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
 export const FIT_WORD = {
   fits: "Within cap",
   "over-cap": "Over cap",

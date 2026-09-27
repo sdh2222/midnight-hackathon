@@ -1,7 +1,7 @@
 # Procurement flow
 
 This is the reference for the pages, the buttons, and where each one goes.
-The name is Sourcenight. Pages follow the production desk at `https://desk-swart.vercel.app/`: a white page, 12 px cards, a compact table, an ink primary button, and underlined page links. The UI face is Die Grotesk C. The wordmark is Lisa Terminal, with `source` in water blue. The wallet pill is the same sky blue as that desk. One primary action per page.
+The name is Sourcenight. Pages follow the production desk at `https://desk-swart.vercel.app/`: a white page, 12 px cards, a compact table, an ink primary button, and underlined page links. The UI face is Die Grotesk C. The wordmark is Lisa Terminal, with `source` in water blue. The wallet pill is the same sky blue as that desk. One primary action per page. A page description says what is public, what stays in the browser, and what the button does, in the same register as that desk’s explanations. Tables carry the offer fields: supplier, quantity, unit price, total, lead, delivery, and score.
 
 Jev ranking is the existing search API. This flow does not add a second ranker.
 The cap check is the existing `commitRange` / `commitVerify` mapper. In demo mode that mapper runs on the local prover.
