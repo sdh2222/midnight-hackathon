@@ -72,11 +72,18 @@ export function Shell({
 }) {
   return (
     <div className="app">
-      <header className="top">
-        <button className="mark" type="button" onClick={() => onStep("onboard")}>
-          <span className="mark-pink">buy</span><span>list</span>
-        </button>
-        <nav className="nav" aria-label="Buy">
+      <header className="desk-head">
+        <div className="desk-top">
+          <button className="mark" type="button" onClick={() => onStep("onboard")}>
+            <span className="mark-water">source</span>night
+          </button>
+          <div className="desk-end">
+            <span className="wallet-pill" title={walletAddress ?? undefined}>
+              {walletAddress ? compactHash(walletAddress) : "Wallet pending"}
+            </span>
+          </div>
+        </div>
+        <nav className="desk-pages" aria-label="Sourcenight">
           {STEPS.map((step) => (
             <button
               key={step.id}
@@ -89,15 +96,12 @@ export function Shell({
               {step.label}
             </button>
           ))}
+          <div className="desk-end">
+            <span className="v-muted">{userLabel}</span>
+            <button className="nav-link" type="button" aria-current={page === "history" ? "page" : undefined} onClick={onHistory}>Past buys</button>
+            <button className="nav-link" type="button" onClick={onLogout}>Sign out</button>
+          </div>
         </nav>
-        <div className="top-end">
-          <span className="wallet-pill" title={walletAddress ?? undefined}>
-            {walletAddress ? compactHash(walletAddress) : "Wallet pending"}
-          </span>
-          <span className="v-muted">{userLabel}</span>
-          <button className="nav-link" type="button" onClick={onHistory}>Past buys</button>
-          <button className="nav-link" type="button" onClick={onLogout}>Sign out</button>
-        </div>
       </header>
       <main className="frame">
         <div className="v-page">{children}</div>
@@ -120,19 +124,11 @@ export function OnboardPage({
   return (
     <>
       <PageHead
-        title="One list, instead of a spreadsheet."
-        description="Searching each supplier and pasting rows into a sheet is the slow part. You enter one buy. Jev sorts the offers. Midnight checks that the row you keep fits your cap."
+        title="Sourcenight"
+        description="This login has a Midnight address. You do not paste a seed."
       />
-      <Card title="What happens next">
-        <ol className="v-list">
-          <li>Input the buy. The cap stays in this browser.</li>
-          <li>Jev turns that buy into a search and returns a sorted list.</li>
-          <li>The mapper checks the row you keep.</li>
-          <li>You leave with that same list, and one row marked kept.</li>
-        </ol>
-      </Card>
       <Card
-        title="Midnight wallet"
+        title="Midnight address"
         footer={(
           <button className="v-btn" type="button" disabled={!walletReady || !walletAddress} onClick={onContinue}>
             Continue
@@ -171,8 +167,17 @@ export function InputPage({
     : "Sort offers";
   return (
     <>
-      <PageHead title="Enter the buy." description="Public fields go to the search. The cap does not." />
+      <PageHead title="What are you buying?" description="Jev receives the item, the quantity, and the keywords. The cap stays in this browser." />
       <form onSubmit={onSubmit}>
+        <div className="wizard">
+        <Card title="Steps">
+          <ol className="step-list">
+            <li data-state="current"><span className="step-no">1</span><span>Buy</span></li>
+            <li><span className="step-no">2</span><span>Sort</span></li>
+            <li><span className="step-no">3</span><span>Verify</span></li>
+            <li><span className="step-no">4</span><span>List</span></li>
+          </ol>
+        </Card>
         <Card
           title="This buy"
           footer={<button className="v-btn" type="submit" disabled={searching}>{button}</button>}
@@ -232,6 +237,7 @@ export function InputPage({
             {error ? <p className="v-note bad" role="alert">{error}</p> : null}
           </div>
         </Card>
+        </div>
       </form>
     </>
   );

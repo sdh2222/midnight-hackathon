@@ -6,33 +6,43 @@ const appId = import.meta.env.VITE_PRIVY_APP_ID?.trim();
 
 function LoginScreen({ login, loading = false }: { login?: () => void; loading?: boolean }) {
   return (
-    <div className="app">
-      <header className="top">
-        <span className="mark"><span className="mark-pink">buy</span><span>list</span></span>
+    <div className="landing">
+      <header className="landing-top">
+        <span className="mark"><span className="mark-water">source</span>night</span>
+        <nav className="landing-nav" aria-label="Sourcenight">
+          <a href="#how">How a buy runs</a>
+        </nav>
       </header>
-      <main className="frame">
-        <div className="v-page">
-          <header className="v-header">
-            <div className="v-header-text">
-              <h1 className="v-title">Skip the sheet.</h1>
-              <p className="v-desc">Sign in once. The next pages take one buy, let Jev sort the offers, and check the row you keep.</p>
-            </div>
-          </header>
-          <section className="v-card">
-            <div className="v-card-head"><h2 className="v-card-title">Account</h2></div>
-            <div className="v-card-body">
-              {login ? (
-                <button className="v-btn" type="button" onClick={login} disabled={loading}>
-                  {loading ? "Checking the session" : "Continue with email or social"}
-                </button>
-              ) : (
-                <p>Set <code>VITE_PRIVY_APP_ID</code> in the root <code>.env</code> before signing in.</p>
-              )}
-              <p className="v-desc">Privy checks the account. This page does not ask for a wallet seed.</p>
-            </div>
-          </section>
+      <section className="hero">
+        <div className="hero-sky" aria-hidden="true" />
+        <div className="hero-copy">
+          <h1>Stop pasting suppliers into a sheet.</h1>
+          <p className="hero-via">via Jev and Midnight</p>
+          <div className="hero-actions">
+            {login ? (
+              <button className="hero-button" type="button" onClick={login} disabled={loading}>
+                {loading ? "Checking the session" : "Open Sourcenight"}
+              </button>
+            ) : (
+              <p>Set <code>VITE_PRIVY_APP_ID</code> in the root <code>.env</code> before signing in.</p>
+            )}
+            <a className="hero-link" href="#how">How a buy runs</a>
+          </div>
         </div>
-      </main>
+      </section>
+      <section className="landing-section" id="how">
+        <h2>One buy. One sorted list. One checked row.</h2>
+        <div className="landing-grid">
+          <ol className="landing-steps">
+            <li><strong>You enter the buy.</strong><span>Item, quantity, keywords, and a cap. The cap stays in this browser.</span></li>
+            <li><strong>Jev sorts the offers.</strong><span>It turns the public buy into a search and returns the list ranked.</span></li>
+            <li><strong>Midnight checks the row you keep.</strong><span>The proof says whether that row fits the cap. Nothing else is revealed.</span></li>
+          </ol>
+          <p className="landing-body">
+            Searching each supplier and copying the row into a spreadsheet is the slow part. Sourcenight does that pass once. You sign in with email or a social account. Privy checks the account. The page does not ask for a wallet seed.
+          </p>
+        </div>
+      </section>
     </div>
   );
 }
