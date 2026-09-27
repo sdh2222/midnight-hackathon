@@ -7,3 +7,4 @@ export * from "./schemas/execution.js";
 export * from "./schemas/intent.js";
 export * from "./schemas/offer.js";
 export * from "./schemas/search.js";
+export * from "./schemas/wallet.js";

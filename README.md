@@ -36,8 +36,9 @@ npm run dev:web
 ReefAPI 키를 `REEF_API_KEY`에 설정해야 실제 검색이 됩니다. Privy 대시보드에서
 로컬 앱 도메인과 로그인 방식을 허용하세요. 키 없이 데모를 확인하려면
 `CATALOG_PROVIDER=mock`, `JEV_PROVIDER=mock`, `VITE_MIDNIGHT_MODE=demo`를 사용합니다.
-Privy 로그인은 계정 인증이며 Midnight 거래 서명은 아닙니다. 실제 지갑 없는 체인
-연동은 후속 설계 과제입니다.
+Privy 로그인이 계정을 확인하면 API가 그 사용자용 Midnight 시드를 한 번 만들고
+`WALLET_ENCRYPTION_KEY`로 암호화해 서버에 둡니다. 브라우저에는 주소만 전달됩니다.
+체인 제출은 아직 데모 증명입니다. 새 지갑에는 수수료로 쓸 Night/Dust가 없습니다.
 
 로컬 Midnight 환경은 node `:9944`, indexer `:8088`, proof server `:6300`을
 사용합니다. proof server는 증명 witness를 처리하므로 로컬에서만 실행하세요.

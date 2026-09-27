@@ -10,6 +10,7 @@ cp .env.example .env
 
 ```dotenv
 PRIVY_APP_ID=your_privy_app_id
+WALLET_ENCRYPTION_KEY=64_hex_characters
 CATALOG_PROVIDER=reef
 REEF_API_KEY=your_server_side_key
 JEV_PROVIDER=typesafe
@@ -38,7 +39,9 @@ Reef search cards expose a price range, not a negotiated quote. We use the upper
 
 The `CatalogProvider` and `JevProvider` interfaces remain the swap points for integrations. `CATALOG_PROVIDER=mock` and `JEV_PROVIDER=mock` support offline demos.
 
-All `/v1` endpoints require a Privy access token in the `Authorization: Bearer` header. The API verifies its signature, issuer, audience and expiry, then scopes execution records to the token's Privy DID. Login identifies the user; it does not authorize a real Midnight transaction.
+All `/v1` endpoints require a Privy access token in the `Authorization: Bearer` header. The API verifies its signature, issuer, audience and expiry, then scopes execution records to the token's Privy DID.
+
+`GET /v1/wallet` creates one Midnight wallet for that Privy user and returns `{ midnightAddress, created }`. The seed is sealed with `WALLET_ENCRYPTION_KEY` and stored in `apps/api/data/wallets.json` (override with `WALLET_STORE_PATH`). The response and the file omit the raw seed. This links the login to a server-held Midnight key. It does not submit `commitRange` or `commitVerify` to the chain.
 
 ## Execution history
 

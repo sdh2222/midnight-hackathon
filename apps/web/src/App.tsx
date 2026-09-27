@@ -14,6 +14,7 @@ import {
   syncExecutionHistory,
 } from "./api/executions";
 import { buildSearchRequest, searchOffers } from "./api/search";
+import { fetchServerWallet } from "./api/wallet";
 import {
   createProcurementContractWorkflow,
   type LockedIntent,
@@ -138,6 +139,7 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyActionError, setHistoryActionError] = useState<string | null>(null);
   const [retryingExecutionId, setRetryingExecutionId] = useState<string | null>(null);
+  const [serverWalletAddress, setServerWalletAddress] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -158,6 +160,19 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void fetchServerWallet(apiFetch).then((wallet) => {
+      if (active) setServerWalletAddress(wallet.midnightAddress);
+    }).catch((failure) => {
+      if (!active) return;
+      setError(failure instanceof Error ? failure.message : "Midnight 지갑을 준비하지 못했습니다.");
+    });
+    return () => {
+      active = false;
+    };
+  }, [apiFetch]);
 
   const synchronizableExecutionIds = historyRecords
     .filter(({ status }) => status === "order_submitted" || status === "counterparty_accepted")
@@ -441,11 +456,9 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
             <ClockIcon />
             거래 내역
           </button>
-          <span className="network-pill">
+          <span className="network-pill" title={serverWalletAddress ?? undefined}>
             <i />
-            {workflowRef.current.mode === "demo"
-              ? walletStatus === "connected" ? "Demo ready" : "Demo 준비 중"
-              : "실체인 연동 준비 중"}
+            {serverWalletAddress ? compactHash(serverWalletAddress) : "Midnight 지갑 준비 중"}
           </span>
           <span className="account-pill">{userLabel}</span>
           <button className="nav-button" type="button" onClick={onLogout}>로그아웃</button>
@@ -592,11 +605,6 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
               </div>
 
               {error && <div className="error-banner" role="alert">{error}</div>}
-              {workflowRef.current.mode !== "demo" && (
-                <div className="error-banner" role="status">
-                  Privy 로그인으로 실제 Midnight 거래를 진행하는 방식은 후속 연동 예정입니다. 데모 테스트는 VITE_MIDNIGHT_MODE=demo로 실행해 주세요.
-                </div>
-              )}
 
               <button className="primary-button search-button" type="submit" disabled={isSearching}>
                 {isSearching && chainPhase === "commit-range" && (
