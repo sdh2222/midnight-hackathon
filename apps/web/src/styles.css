@@ -10,8 +10,24 @@
   --line-strong: #cfd5d8;
   --muted: #57686f;
   --faint: #859196;
-  --font: system-ui, sans-serif;
+  --font: "Die Grotesk C", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", monospace;
+}
+
+@font-face {
+  font-family: "Die Grotesk C";
+  src: url("/fonts/die-grotesk/die-grotesk-c-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Die Grotesk C";
+  src: url("/fonts/die-grotesk/die-grotesk-c-medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
 }
 
 * { box-sizing: border-box; }
@@ -46,7 +62,8 @@ button:disabled { cursor: not-allowed; }
   border: 0;
   background: none;
   padding: 0;
-  font-family: var(--mono);
+  font-family: var(--font);
+  font-weight: 500;
   font-size: 16px;
   line-height: 28px;
   text-decoration: none;
