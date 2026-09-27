@@ -4,6 +4,9 @@ Thumbs.db
 
 # Dependencies
 node_modules/
+
+# Die Grotesk is fetched from the private fonts repo. Do not commit the files.
+apps/web/public/fonts/die-grotesk/
 .pnp
 .pnp.js
 

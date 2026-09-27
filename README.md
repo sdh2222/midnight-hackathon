@@ -3,9 +3,12 @@
 기업의 최대 예산을 공개하지 않고 AI가 B2B 공급처를 탐색·비교하도록 돕는
 private procurement workspace입니다.
 
+페이지 순서와 각 버튼은 [docs/product/procurement-flow.md](docs/product/procurement-flow.md)에 있습니다.
+화면은 영어이고, 한 페이지에 결정 하나, 그다음 페이지로 넘어갑니다.
+
 ## 구성
 
-- `apps/web`: Privy 로그인 → 구매 요청 → 후보 비교 → 사용자 승인 React UI
+- `apps/web`: Privy 로그인 다음 Onboard, Input, Sort, Verify, List. Jev 정렬과 mapper 검증은 기존 API를 그대로 씁니다.
 - `apps/api`: ReefAPI/Mock Alibaba catalog와 Jev 평가 파이프라인
 - `contract`: `commitRange`와 `commitVerify` Compact 컨트랙트
 - `packages/shared`: 요청, 견적, 검색 결과의 공통 스키마
