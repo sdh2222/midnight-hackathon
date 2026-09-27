@@ -4,6 +4,7 @@ import {
   Bytes32HexSchema,
   CreateExecutionHistorySchema,
   SearchRequestSchema,
+  ServerWalletSchema,
   sha256Hex,
   type ExecutionHistoryRecord,
 } from "@midnight-hackathon/shared";
@@ -30,10 +31,14 @@ import {
   type ExecutionStore,
 } from "./modules/executions/execution-store.js";
 import { SearchOrchestrator } from "./modules/searches/search-orchestrator.js";
+import { deriveMidnightAddress } from "./modules/wallets/derive-address.js";
+import { InMemoryWalletStore, type WalletStore } from "./modules/wallets/wallet-store.js";
+import { WalletService } from "./modules/wallets/wallet-service.js";
 
 declare module "fastify" {
   interface FastifyRequest {
     authAccountIdHash?: string;
+    authPrivyUserId?: string;
   }
 }
 
@@ -48,6 +53,10 @@ export type BuildAppOptions = {
   orderAdapter?: OrderAdapter;
   executionRetryPolicy?: Partial<ExecutionRetryPolicy>;
   executionWait?: (milliseconds: number) => Promise<void>;
+  walletStore?: WalletStore;
+  walletEncryptionKey?: string;
+  deriveMidnightAddress?: (seedHex: string) => Promise<string>;
+  createWalletSeed?: () => string;
 };
 
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
@@ -85,7 +94,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       return reply.code(401).send({ error: "authentication_required" });
     }
     try {
-      request.authAccountIdHash = await sha256Hex(`privy:${await options.authVerifier(match[1])}`);
+      const privyUserId = await options.authVerifier(match[1]);
+      request.authPrivyUserId = privyUserId;
+      request.authAccountIdHash = await sha256Hex(`privy:${privyUserId}`);
     } catch {
       return reply.code(401).send({ error: "invalid_access_token" });
     }
@@ -102,6 +113,26 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       return reply.code(502).send({ error: error.code, message: error.message });
     }
     return reply.send(error);
+  });
+
+  const walletService = options.walletEncryptionKey
+    ? WalletService.fromKey(
+      options.walletStore ?? new InMemoryWalletStore(),
+      options.walletEncryptionKey,
+      options.deriveMidnightAddress ?? deriveMidnightAddress,
+      options.createWalletSeed,
+    )
+    : undefined;
+
+  app.get("/v1/wallet", async (request, reply) => {
+    if (!request.authPrivyUserId) {
+      return reply.code(401).send({ error: "authentication_required" });
+    }
+    if (!walletService) {
+      return reply.code(500).send({ error: "wallet_not_configured" });
+    }
+    const wallet = ServerWalletSchema.parse(await walletService.ensure(request.authPrivyUserId));
+    return reply.code(200).send(wallet);
   });
 
   app.post("/v1/searches", async (request, reply) => {
