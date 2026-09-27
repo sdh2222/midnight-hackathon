@@ -1,8 +1,9 @@
-import type { FormEvent, ReactNode } from "react";
+import type { CSSProperties, FormEvent, ReactNode } from "react";
 import type { ExecutionHistoryRecord, RankedOffer, SearchResponse } from "@midnight-hackathon/shared";
 import type { LockedIntent } from "../midnight";
 import { offerFit, type Fit } from "./fit";
 import { FIT_WORD, SORT_WORD, STATUS_WORD, compactHash, number, seconds, won } from "./format";
+import { SortMotion } from "./sort-motion";
 
 export const STEPS = [
   { id: "onboard", label: "Onboard" },
@@ -250,6 +251,7 @@ function OfferRows({
   selectedId,
   keptId,
   onSelect,
+  settle = false,
 }: {
   offers: readonly RankedOffer[];
   capKrw: number;
@@ -257,9 +259,10 @@ function OfferRows({
   selectedId: string | null;
   keptId?: string;
   onSelect?: (offerId: string) => void;
+  settle?: boolean;
 }) {
   return (
-    <div className="v-table-wrap">
+    <div className={settle ? "v-table-wrap sort-rows" : "v-table-wrap"}>
       <table className="v-table">
         <thead>
           <tr>
@@ -279,6 +282,7 @@ function OfferRows({
               <tr
                 key={ranked.offer.offerId}
                 className={selected ? "selected pick" : onSelect ? "pick" : undefined}
+                style={settle ? { "--i": String(index) } as CSSProperties : undefined}
                 role={onSelect ? "button" : undefined}
                 aria-pressed={onSelect ? selected : undefined}
                 tabIndex={onSelect ? 0 : undefined}
@@ -342,39 +346,43 @@ export function SortPage({
         title="Jev sorted this buy."
         description={`${result.plan.query} · ${SORT_WORD[result.plan.sort] ?? result.plan.sort}`}
       />
-      <Card flush>
-        <div className="v-metrics">
-          <div className="v-metric"><span className="v-label">Offers</span><span className="v-figure">{result.offers.length}</span></div>
-          <div className="v-metric"><span className="v-label">Within cap</span><span className="v-figure">{fits}</span></div>
-          <div className="v-metric"><span className="v-label">Sort time</span><span className="v-figure">{elapsedMs == null ? "—" : seconds(elapsedMs)}</span></div>
-        </div>
-      </Card>
-      <Card
-        title="Jev"
-        flush
-        footer={(
-          <>
-            <button className="v-link" type="button" onClick={onEdit}>Edit the buy</button>
-            <button className="v-btn" type="button" disabled={selectedFit !== "fits"} onClick={onVerify}>Verify this row</button>
-          </>
-        )}
-      >
-        {result.offers.length === 0 ? (
-          <div className="v-card-body"><p>No offers came back. Edit the buy and sort again.</p></div>
-        ) : (
-          <OfferRows
-            offers={result.offers}
-            capKrw={capKrw}
-            requiredBy={requiredBy}
-            selectedId={selectedId}
-            onSelect={onSelect}
-          />
-        )}
-      </Card>
-      {locked ? <p className="v-muted">Cap locked · {compactHash(locked.commitRangeTransactionId)}</p> : null}
-      {selectedFit && selectedFit !== "fits" ? (
-        <p className="v-note bad">{FIT_WORD[selectedFit]}. Pick a row that fits before verifying.</p>
-      ) : null}
+      {result.offers.length > 0 ? <SortMotion total={result.offers.length} fits={fits} /> : null}
+      <div className={result.offers.length > 0 ? "sort-settle" : undefined}>
+        <Card flush>
+          <div className="v-metrics">
+            <div className="v-metric"><span className="v-label">Offers</span><span className="v-figure">{result.offers.length}</span></div>
+            <div className="v-metric"><span className="v-label">Within cap</span><span className="v-figure">{fits}</span></div>
+            <div className="v-metric"><span className="v-label">Sort time</span><span className="v-figure">{elapsedMs == null ? "—" : seconds(elapsedMs)}</span></div>
+          </div>
+        </Card>
+        <Card
+          title="Jev"
+          flush
+          footer={(
+            <>
+              <button className="v-link" type="button" onClick={onEdit}>Edit the buy</button>
+              <button className="v-btn" type="button" disabled={selectedFit !== "fits"} onClick={onVerify}>Verify this row</button>
+            </>
+          )}
+        >
+          {result.offers.length === 0 ? (
+            <div className="v-card-body"><p>No offers came back. Edit the buy and sort again.</p></div>
+          ) : (
+            <OfferRows
+              offers={result.offers}
+              capKrw={capKrw}
+              requiredBy={requiredBy}
+              selectedId={selectedId}
+              onSelect={onSelect}
+              settle
+            />
+          )}
+        </Card>
+        {locked ? <p className="v-muted">Cap locked · {compactHash(locked.commitRangeTransactionId)}</p> : null}
+        {selectedFit && selectedFit !== "fits" ? (
+          <p className="v-note bad">{FIT_WORD[selectedFit]}. Pick a row that fits before verifying.</p>
+        ) : null}
+      </div>
     </>
   );
 }

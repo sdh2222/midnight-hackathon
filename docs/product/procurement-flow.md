@@ -62,6 +62,7 @@ Input
 
 Sort
 
+- When the page opens, a dither plays once under the title rule. Boxes come off that line, flick through three orders, and the ones that stay drop into a stack. The table rows then settle in the API order. Reduced motion skips the play.
 - Rows are `searchResult.offers` in the order the API returned. This page does not reorder them.
 - A row fits when its converted total is within the cap and, if a needed-by date was set, its delivery date is on or before that date. That is the same rule the previous screen used. It is not a new score.
 - Clicking a row, or pressing Enter or Space on it, selects it. The first fitting row is selected when the page opens.
