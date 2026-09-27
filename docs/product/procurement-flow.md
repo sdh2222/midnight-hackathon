@@ -1,7 +1,7 @@
 # Procurement flow
 
 This is the reference for the pages, the buttons, and where each one goes.
-The screen is English. The field is pink. Windows, chips, and the one filled button follow the eth-tokyo desk: square, ink on paper, one primary action per page.
+The screen is English. Pages use the shipped eth-tokyo desk: a white page, 12 px cards, a compact table, an ink primary button, and underlined page links. Pink replaces that desk's water blue on the wordmark, links, the wallet pill, and status tints. One primary action per page.
 
 Jev ranking is the existing search API. This flow does not add a second ranker.
 The cap check is the existing `commitRange` / `commitVerify` mapper. In demo mode that mapper runs on the local prover.
