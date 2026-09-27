@@ -101,6 +101,7 @@ export default defineConfig({
     exclude: ["@midnight-ntwrk/onchain-runtime-v3"],
   },
   server: {
+    host: "::",
     port: 5173,
     proxy: {
       "/v1": {

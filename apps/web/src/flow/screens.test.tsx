@@ -67,6 +67,7 @@ describe("buy pages", () => {
         requiredBy=""
         selectedId="offer-1"
         elapsedMs={1200}
+        acceptedIds={["offer-1"]}
         locked={null}
         onSelect={() => undefined}
         onEdit={() => undefined}
@@ -76,7 +77,7 @@ describe("buy pages", () => {
     expect(html).toContain("Jev");
     expect(html).toContain("Nitrile gloves");
     expect(html).toContain("Within cap");
-    expect(html).toContain("Verify this row");
+    expect(html).toContain("Open the list");
     expect(html).toContain("1.2s");
   });
 

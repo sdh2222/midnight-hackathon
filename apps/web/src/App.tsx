@@ -87,6 +87,7 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
   const [jevKeyStored, setJevKeyStored] = useState(false);
   const [reefKeyStored, setReefKeyStored] = useState(false);
   const [sortMs, setSortMs] = useState<number | null>(null);
+  const [acceptedIds, setAcceptedIds] = useState<string[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -323,9 +324,13 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
         offers: [] as RankedOffer[],
         searchedAt: new Date().toISOString(),
       };
+      setAcceptedIds([]);
       setSearchResult(empty);
       setPage("sort");
       let latestOffers = empty.offers;
+      const accepted: string[] = [];
+      const privateCap = publicIds.includes("budget") ? Number.MAX_SAFE_INTEGER : maxBudget;
+      const privateDate = publicIds.includes("neededBy") ? "" : form.requiredBy;
       await streamPipeline(
         {
           ...buildSearchRequest(lock.intentId, parsed.data),
@@ -338,11 +343,17 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
               return { ...current, plan: { ...current.plan, query: pipelineEvent.queries.join(" · ") } };
             });
           }
-          if (pipelineEvent.type === "page") {
+          if (pipelineEvent.type === "row") {
+            const ranked = pipelineEvent.offer;
+            const verdict = offerFit(ranked.offer, privateCap, privateDate);
+            if (verdict === "fits" && !accepted.includes(ranked.offer.offerId)) {
+              accepted.push(ranked.offer.offerId);
+              setAcceptedIds([...accepted]);
+            }
             setSearchResult((current) => {
               if (!current) return current;
-              const byId = new Map(current.offers.map((ranked) => [ranked.offer.offerId, ranked]));
-              for (const ranked of pipelineEvent.offers) byId.set(ranked.offer.offerId, ranked);
+              const byId = new Map(current.offers.map((row) => [row.offer.offerId, row]));
+              byId.set(ranked.offer.offerId, ranked);
               const offers = [...byId.values()].sort((left, right) =>
                 right.relevanceScore - left.relevanceScore
                 || left.offer.offerId.localeCompare(right.offer.offerId));
@@ -358,10 +369,7 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
         apiFetch,
       );
       setSortMs(performance.now() - started);
-      const firstFit = latestOffers.find(
-        ({ offer }) => offerFit(offer, maxBudget, form.requiredBy) === "fits",
-      );
-      setSelectedOfferId(firstFit?.offer.offerId ?? latestOffers[0]?.offer.offerId ?? null);
+      setSelectedOfferId(accepted[0] ?? null);
       setConfirmed(false);
       setApproval(null);
       setPage("sort");
@@ -383,7 +391,7 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
   }
 
   async function confirmApproval() {
-    if (!selectedOffer || !searchResult || !lockedIntent || !wallet) return;
+    if (!selectedOffer || !searchResult || !lockedIntent || !wallet) return false;
     setIsApproving(true);
     setApprovalError(null);
     setChainPhase("commit-verify");
@@ -417,12 +425,20 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
           : "The order record could not be saved.";
       }
       setApproval(nextApproval);
+      return true;
     } catch (approvalFailure) {
       setApprovalError(approvalFailure instanceof Error ? approvalFailure.message : "The mapper check failed.");
+      return false;
     } finally {
       setIsApproving(false);
       setChainPhase("idle");
     }
+  }
+
+  async function openList() {
+    setApprovalError(null);
+    const saved = await confirmApproval();
+    if (saved) setPage("list");
   }
 
   async function startOver() {
@@ -452,8 +468,8 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
     onboard: true,
     input: true,
     sort: searchResult !== null,
-    verify: selectedOffer !== null && lockedIntent !== null,
     list: approval !== null && searchResult !== null,
+    history: approval !== null,
   };
 
   function openStep(step: StepId) {
@@ -507,25 +523,11 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
           requiredBy={form.requiredBy}
           selectedId={selectedOfferId}
           elapsedMs={sortMs}
+          acceptedIds={acceptedIds}
           locked={lockedIntent}
           onSelect={setSelectedOfferId}
           onEdit={() => setPage("input")}
-          onVerify={() => { setApprovalError(null); setPage("verify"); }}
-        />
-      )}
-      {page === "verify" && selectedOffer && lockedIntent && (
-        <VerifyPage
-          ranked={selectedOffer}
-          capKrw={maxBudget}
-          requiredBy={form.requiredBy}
-          rangeId={lockedIntent.commitRangeTransactionId}
-          confirmed={confirmed}
-          running={isApproving}
-          error={approvalError}
-          verifiedId={approval?.commitVerifyTransactionId ?? null}
-          onConfirm={setConfirmed}
-          onCheck={() => void confirmApproval()}
-          onOpenList={() => setPage("list")}
+          onVerify={() => void openList()}
         />
       )}
       {page === "list" && searchResult && approval && (

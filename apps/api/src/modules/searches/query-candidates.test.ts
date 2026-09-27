@@ -25,10 +25,10 @@ describe("query pipeline", () => {
       events.push(event.type);
       if (event.type === "queries") expect(event.queries.length).toBeGreaterThan(0);
       if (event.type === "queries") expect(event.queries.length).toBeLessThanOrEqual(5);
-      if (event.type === "page") expect(queryCandidates(requirement)).toContain(event.query);
+      if (event.type === "row") expect(queryCandidates(requirement)).toContain(event.query);
     });
     expect(events[0]).toBe("queries");
     expect(events.at(-1)).toBe("done");
-    expect(events.filter((type) => type === "page").length).toBeGreaterThan(0);
+    expect(events.filter((type) => type === "row").length).toBeGreaterThan(0);
   });
 });

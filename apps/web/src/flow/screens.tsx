@@ -7,13 +7,13 @@ import { FIT_WORD, SORT_WORD, STATUS_WORD, compactHash, number, percent, seconds
 export const STEPS = [
   { id: "onboard", label: "Onboard" },
   { id: "input", label: "Input" },
-  { id: "sort", label: "Sort" },
-  { id: "verify", label: "Verify" },
+  { id: "sort", label: "Sort & verify" },
   { id: "list", label: "List" },
+  { id: "history", label: "Histories" },
 ] as const;
 
 export type StepId = (typeof STEPS)[number]["id"];
-export type PageId = StepId | "history";
+export type PageId = StepId;
 
 export type BuyFieldId = "item" | "quantity" | "unit" | "destination" | "keywords" | "neededBy" | "budget";
 
@@ -137,7 +137,6 @@ export function Shell({
             </button>
           ))}
           <div className="desk-end">
-            <button className="nav-link" type="button" aria-current={page === "history" ? "page" : undefined} onClick={onHistory}>Past buys</button>
             <button className="nav-link" type="button" onClick={onLogout}>Sign out</button>
           </div>
         </nav>
@@ -423,25 +422,22 @@ export function InputPage({
 function RankColumn({
   title,
   offers,
-  capKrw,
-  requiredBy,
   selectedId,
   onSelect,
+  mark,
 }: {
   title: string;
   offers: readonly RankedOffer[];
-  capKrw: number;
-  requiredBy: string;
   selectedId: string | null;
   onSelect: (offerId: string) => void;
+  mark: (ranked: RankedOffer) => string;
 }) {
   return (
     <section className="rank-column">
       <h2>{title}</h2>
-      {offers.length === 0 ? <p className="v-desc">Waiting for the next page.</p> : (
+      {offers.length === 0 ? <p className="v-desc">Waiting for the next row.</p> : (
         <ol className="rank-list">
           {offers.map((ranked, index) => {
-            const fit = offerFit(ranked.offer, capKrw, requiredBy);
             const selected = selectedId === ranked.offer.offerId;
             return (
               <li key={ranked.offer.offerId}>
@@ -452,7 +448,7 @@ function RankColumn({
                 >
                   <span>{index + 1}</span>
                   <strong>{ranked.offer.title}</strong>
-                  <span>{won(ranked.offer.convertedTotalKrw)} · {FIT_WORD[fit]}</span>
+                  <span>{won(ranked.offer.convertedTotalKrw)} · {mark(ranked)}</span>
                 </button>
               </li>
             );
@@ -553,6 +549,7 @@ export function SortPage({
   requiredBy,
   selectedId,
   elapsedMs,
+  acceptedIds,
   onSelect,
   onEdit,
   onVerify,
@@ -562,14 +559,15 @@ export function SortPage({
   requiredBy: string;
   selectedId: string | null;
   elapsedMs: number | null;
+  acceptedIds: readonly string[];
   locked: LockedIntent | null;
   onSelect: (offerId: string) => void;
   onEdit: () => void;
   onVerify: () => void;
 }) {
-  const fits = result.offers.filter((ranked) => offerFit(ranked.offer, capKrw, requiredBy) === "fits").length;
-  const selected = result.offers.find((ranked) => ranked.offer.offerId === selectedId) ?? null;
-  const selectedFit: Fit | null = selected ? offerFit(selected.offer, capKrw, requiredBy) : null;
+  const accepted = result.offers.filter((ranked) => acceptedIds.includes(ranked.offer.offerId));
+  const fits = accepted.length;
+  const selectedAccepted = selectedId !== null && acceptedIds.includes(selectedId);
   return (
     <>
       <PageHead
@@ -580,18 +578,16 @@ export function SortPage({
         <RankColumn
           title="Jev rank"
           offers={result.offers}
-          capKrw={capKrw}
-          requiredBy={requiredBy}
           selectedId={selectedId}
           onSelect={onSelect}
+          mark={(ranked) => `${percent(ranked.relevanceScore)} rank`}
         />
         <RankColumn
           title="Midnight"
-          offers={result.offers.filter((ranked) => offerFit(ranked.offer, capKrw, requiredBy) === "fits")}
-          capKrw={capKrw}
-          requiredBy={requiredBy}
+          offers={accepted}
           selectedId={selectedId}
           onSelect={onSelect}
+          mark={() => "Checked"}
         />
       </div>
       <div>
@@ -605,13 +601,13 @@ export function SortPage({
         </Card>
         <div className="hero-actions">
           <button className="v-link" type="button" onClick={onEdit}>Edit the buy</button>
-          <button className="v-btn" type="button" disabled={selectedFit !== "fits"} onClick={onVerify}>Verify this row</button>
+          <button className="v-btn" type="button" disabled={!selectedAccepted} onClick={onVerify}>Open the list</button>
         </div>
-        {fits === 0 && requiredBy ? (
-          <p className="v-note bad">Nothing moved to Midnight. No row arrives by {requiredBy}, or the total is over the budget.</p>
+        {result.offers.length > 0 && fits === 0 ? (
+          <p className="v-note bad">Each row was ranked, then checked against the private fields. None passed, so the right side stays empty.</p>
         ) : null}
-        {selectedFit && selectedFit !== "fits" ? (
-          <p className="v-note bad">{FIT_WORD[selectedFit]}. Pick a row that fits before verifying.</p>
+        {selectedId && !selectedAccepted ? (
+          <p className="v-note bad">Midnight did not accept this row. Pick one on the right.</p>
         ) : null}
       </div>
     </>
@@ -689,6 +685,29 @@ export function VerifyPage({
   );
 }
 
+function exportOffers(result: SearchResponse, keptId: string) {
+  const lines = [
+    "rank,title,supplier,totalKrw,kept",
+    ...result.offers.map((ranked, index) => {
+      const cells = [
+        String(index + 1),
+        ranked.offer.title,
+        ranked.offer.supplierName ?? ranked.offer.supplierId,
+        ranked.offer.convertedTotalKrw,
+        ranked.offer.offerId === keptId ? "kept" : "",
+      ];
+      return cells.map((cell) => `"${cell.replaceAll("\"", "\"\"")}"`).join(",");
+    }),
+  ];
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "sourcenight-list.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function ListPage({
   result,
   capKrw,
@@ -710,16 +729,16 @@ export function ListPage({
   return (
     <>
       <PageHead
-        title="The sorted list, with one row kept."
+        title="List"
         description={orderNote}
       />
       <Card
-        title="Final"
+        title="Export"
         flush
         footer={(
           <>
-            <button className="v-link" type="button" onClick={onHistory}>Past buys</button>
-            <button className="v-btn" type="button" onClick={onNew}>New buy</button>
+            <button className="v-link" type="button" onClick={() => exportOffers(result, keptId)}>Export</button>
+            <button className="v-btn" type="button" onClick={onHistory}>Histories</button>
           </>
         )}
       >
@@ -757,13 +776,12 @@ export function HistoryPage({
   return (
     <>
       <PageHead
-        title="Orders from checked rows."
-        description="Each row is a buy whose fit was already checked. The record stores the offer, the commitVerify id, and the order status. It does not store the cap. Try the order again appears only when that attempt failed. New buy starts the pages over with an empty form."
+        title="Histories"
+        description="This is the end of the buy. The record keeps the offer and the check. It does not keep the private fields."
       />
       <Card
-        title="Past buys"
+        title="Saved buys"
         flush={records.length > 0}
-        footer={<button className="v-btn" type="button" onClick={onNew}>New buy</button>}
       >
         {loading ? <p>Loading past buys.</p> : null}
         {error ? (

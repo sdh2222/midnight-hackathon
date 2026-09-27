@@ -5,7 +5,6 @@ import {
   type SearchResponse,
 } from "@midnight-hackathon/shared";
 import type { CatalogProvider } from "../../integrations/alibaba/catalog-provider.js";
-import { localReefKey, ReefAlibabaCatalog } from "../../integrations/alibaba/reef-catalog.js";
 import type { JevProvider, SearchPlanCandidates } from "../../integrations/jev/jev-provider.js";
 import { mapCatalogListingToOffer } from "../offers/offer-mapper.js";
 
@@ -42,7 +41,7 @@ export function queryCandidates(requirement: PublicRequirement): string[] {
 
 export type PipelineEvent =
   | { type: "queries"; queries: string[] }
-  | { type: "page"; query: string; offers: SearchResponse["offers"] }
+  | { type: "row"; query: string; offer: SearchResponse["offers"][number] }
   | { type: "done" }
   | { type: "error"; message: string };
 
@@ -64,8 +63,6 @@ export class SearchOrchestrator {
   constructor(private readonly dependencies: SearchOrchestratorDependencies) {}
 
   private catalog(): CatalogProvider {
-    const key = localReefKey();
-    if (key) return new ReefAlibabaCatalog(key);
     return this.dependencies.catalog;
   }
 
@@ -115,16 +112,17 @@ export class SearchOrchestrator {
         request.publicRequirement,
       );
       const fresh = listings.filter((listing) => !seen.has(listing.listingId));
-      for (const listing of fresh) seen.add(listing.listingId);
-      const offers = await Promise.all(fresh.map((listing) => mapCatalogListingToOffer(
-        listing,
-        request.publicRequirement,
-        { fetchedAt: this.dependencies.now(), krwPerCurrencyUnit: this.dependencies.krwPerCurrencyUnit },
-      )));
-      const ranked = offers.length === 0
-        ? []
-        : await this.dependencies.jev.rankOffers(request.publicRequirement, offers);
-      emit({ type: "page", query, offers: ranked });
+      for (const listing of fresh) {
+        seen.add(listing.listingId);
+        const offer = await mapCatalogListingToOffer(listing, request.publicRequirement, {
+          fetchedAt: this.dependencies.now(),
+          krwPerCurrencyUnit: this.dependencies.krwPerCurrencyUnit,
+        });
+        const [ranked] = await this.dependencies.jev.rankOffers(request.publicRequirement, [offer]);
+        if (!ranked) continue;
+        // Rank this arrival, then hand it off. The browser verifies it before the next row.
+        emit({ type: "row", query, offer: ranked });
+      }
     }
     emit({ type: "done" });
   }

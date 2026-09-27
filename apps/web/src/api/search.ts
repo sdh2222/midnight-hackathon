@@ -46,7 +46,7 @@ export async function searchOffers(
 
 export type PipelineEvent =
   | { type: "queries"; queries: string[] }
-  | { type: "page"; query: string; offers: RankedOffer[] }
+  | { type: "row"; query: string; offer: RankedOffer }
   | { type: "done" }
   | { type: "error"; message: string };
 
@@ -78,8 +78,8 @@ export async function streamPipeline(
     for (const line of lines) {
       if (!line.trim()) continue;
       const event = JSON.parse(line) as PipelineEvent;
-      if (event.type === "page") {
-        event.offers = event.offers.map((offer) => RankedOfferSchema.parse(offer));
+      if (event.type === "row") {
+        event.offer = RankedOfferSchema.parse(event.offer);
       }
       onEvent(event);
       if (event.type === "error") throw new Error(event.message);
