@@ -33,7 +33,16 @@ function AuthenticatedWorkspace() {
 }
 
 export function AuthGate() {
-  if (!appId) return <LoginScreen />;
+  if (!appId) {
+    return (
+      <App
+        userId="local"
+        userLabel="This machine"
+        apiFetch={globalThis.fetch}
+        onLogout={() => undefined}
+      />
+    );
+  }
   return (
     <PrivyProvider
       appId={appId}

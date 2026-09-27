@@ -34,6 +34,12 @@ export class MockJevProvider implements JevProvider {
     return { query, country, sort };
   }
 
+  async orderQueries(requirement: PublicRequirement, queries: string[]): Promise<string[]> {
+    const wanted = tokens(requirement.item);
+    const overlap = (query: string) => [...tokens(query)].filter((token) => wanted.has(token)).length;
+    return [...queries].sort((left, right) => overlap(right) - overlap(left) || left.localeCompare(right)).slice(0, 5);
+  }
+
   async rankOffers(requirement: PublicRequirement, offers: Offer[]): Promise<RankedOffer[]> {
     const wanted = tokens(`${requirement.item} ${requirement.keywords.join(" ")}`);
 

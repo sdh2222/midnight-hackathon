@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   SearchPlanSchema,
   type Offer,
@@ -8,7 +10,7 @@ import {
   type SearchSort,
 } from "@midnight-hackathon/shared";
 import { z } from "zod";
-import type { JevProvider, SearchPlanCandidates } from "./jev-provider.js";
+import { SEARCH_QUERY_PROMPT, type JevProvider, type SearchPlanCandidates } from "./jev-provider.js";
 
 const ChoiceAnswerSchema = z
   .object({
@@ -60,6 +62,13 @@ type JevRequest = {
 };
 
 const DEFAULT_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
+const localJevKeyFile = fileURLToPath(new URL("../../../../web/.local/jev-key", import.meta.url));
+
+function localJevKey(): string | undefined {
+  if (!existsSync(localJevKeyFile)) return undefined;
+  const stored = readFileSync(localJevKeyFile, "utf8").trim();
+  return stored.length > 0 ? stored : undefined;
+}
 const SCORE_LEVELS = [
   "Not suitable for the public requirement",
   "Weak match with major public requirement gaps",
@@ -88,6 +97,25 @@ function requireCandidates<T>(name: string, values: T[]): T[] {
 
 function indexedCriteria<T>(prefix: string, values: T[]): Record<string, T> {
   return Object.fromEntries(values.map((value, index) => [`${prefix}_${index}`, value]));
+}
+
+function queriesByProbability(answerValue: unknown, queries: string[]): string[] {
+  const parsed = ChoiceAnswerSchema.safeParse(answerValue);
+  if (!parsed.success) {
+    throw new JevProviderError("Jev returned an invalid choice answer", undefined, {
+      cause: parsed.error,
+    });
+  }
+  const ranked = Object.entries(parsed.data.probabilities)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .flatMap(([key]) => {
+      const match = /^query_(\d+)$/u.exec(key);
+      const index = match?.[1] === undefined ? Number.NaN : Number.parseInt(match[1], 10);
+      const query = queries[index];
+      return query === undefined ? [] : [query];
+    });
+  if (ranked.length > 0) return ranked.slice(0, 5);
+  return [selectedCandidate(answerValue, queries, "query")];
 }
 
 function selectedCandidate<T>(
@@ -149,6 +177,30 @@ export class HttpJevProvider implements JevProvider {
     this.sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => {
       setTimeout(resolve, milliseconds);
     }));
+  }
+
+  async orderQueries(
+    requirement: PublicRequirement,
+    queries: string[],
+    disclosedBudgetKrw?: string,
+  ): Promise<string[]> {
+    const pool = requireCandidates("query", queries).slice(0, 8);
+    const result = await this.evaluate({
+      model: this.model,
+      state: {
+        publicRequirement: requirement,
+        ...(disclosedBudgetKrw ? { disclosedBudgetKrw } : {}),
+        objective: SEARCH_QUERY_PROMPT,
+      },
+      questions: {
+        search_queries: {
+          type: "choice",
+          instructions: SEARCH_QUERY_PROMPT,
+          criteria: indexedCriteria("query", pool),
+        },
+      },
+    });
+    return queriesByProbability(result.answers.search_queries, pool);
   }
 
   async chooseSearchPlan(
@@ -274,7 +326,7 @@ export class HttpJevProvider implements JevProvider {
         response = await this.fetchImplementation(this.endpoint, {
           method: "POST",
           headers: {
-            authorization: `Bearer ${this.options.apiKey}`,
+            authorization: `Bearer ${localJevKey() ?? this.options.apiKey}`,
             "content-type": "application/json",
           },
           body: JSON.stringify(request),

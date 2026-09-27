@@ -13,8 +13,8 @@ import {
   retryExecutionHistory,
   syncExecutionHistory,
 } from "./api/executions";
-import { buildSearchRequest, searchOffers } from "./api/search";
-import { fetchServerWallet } from "./api/wallet";
+import { buildSearchRequest, streamPipeline } from "./api/search";
+import type { BuyFieldId } from "./flow/screens";
 import { offerFit } from "./flow/fit";
 import {
   HistoryPage,
@@ -83,6 +83,8 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
   const [historyActionError, setHistoryActionError] = useState<string | null>(null);
   const [retryingExecutionId, setRetryingExecutionId] = useState<string | null>(null);
   const [serverWalletAddress, setServerWalletAddress] = useState<string | null>(null);
+  const [creatingWallet, setCreatingWallet] = useState(false);
+  const [jevKeyStored, setJevKeyStored] = useState(false);
   const [sortMs, setSortMs] = useState<number | null>(null);
 
   useEffect(() => {
@@ -106,14 +108,48 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
 
   useEffect(() => {
     let active = true;
-    void fetchServerWallet(apiFetch).then((linked) => {
-      if (active) setServerWalletAddress(linked.midnightAddress);
-    }).catch((failure) => {
-      if (!active) return;
-      setError(failure instanceof Error ? failure.message : "The Midnight wallet could not be prepared.");
-    });
+    void fetch("/local-wallet").then(async (response) => {
+      if (!response.ok) return;
+      const linked = await response.json() as { midnightAddress?: string | null };
+      if (active && linked.midnightAddress) setServerWalletAddress(linked.midnightAddress);
+    }).catch(() => undefined);
+    void fetch("/local-jev-key").then(async (response) => {
+      if (!response.ok) return;
+      const body = await response.json() as { stored?: boolean };
+      if (active && body.stored) setJevKeyStored(true);
+    }).catch(() => undefined);
     return () => { active = false; };
-  }, [apiFetch]);
+  }, []);
+
+  async function createLocalWallet() {
+    setCreatingWallet(true);
+    setError(null);
+    try {
+      const response = await fetch("/local-wallet", { method: "POST" });
+      if (!response.ok) throw new Error("The wallet could not be created.");
+      const linked = await response.json() as { midnightAddress?: string };
+      if (!linked.midnightAddress) throw new Error("The wallet could not be created.");
+      setServerWalletAddress(linked.midnightAddress);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "The wallet could not be created.");
+    } finally {
+      setCreatingWallet(false);
+    }
+  }
+
+  async function saveJevKey(apiKey: string) {
+    setError(null);
+    const response = await fetch("/local-jev-key", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ apiKey }),
+    });
+    if (!response.ok) {
+      setError("The Jev key could not be stored.");
+      return;
+    }
+    setJevKeyStored(true);
+  }
 
   const synchronizableExecutionIds = historyRecords
     .filter(({ status }) => status === "order_submitted" || status === "counterparty_accepted")
@@ -217,7 +253,7 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
     }
   }
 
-  async function handleSearch(event: FormEvent<HTMLFormElement>) {
+  async function handleSearch(event: FormEvent<HTMLFormElement>, publicIds: BuyFieldId[]) {
     event.preventDefault();
     setError(null);
     const parsed = PublicRequirementSchema.safeParse({
@@ -226,10 +262,15 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
       unit: form.unit,
       destinationCountry: form.destinationCountry.toUpperCase(),
       keywords: form.keywords.split(",").map((keyword) => keyword.trim()).filter(Boolean),
-      ...(form.requiredBy ? { requiredBy: form.requiredBy } : {}),
+      ...(publicIds.includes("neededBy") && form.requiredBy ? { requiredBy: form.requiredBy } : {}),
     });
     if (!parsed.success) {
       setError("Check the item, quantity, country, and keywords.");
+      return;
+    }
+    const requiredPublic: BuyFieldId[] = ["item", "quantity", "unit", "destination", "keywords"];
+    if (requiredPublic.some((field) => !publicIds.includes(field))) {
+      setError("Item, quantity, unit, ship to, and keywords stay public so Jev can search.");
       return;
     }
     if (!Number.isSafeInteger(maxBudget) || maxBudget <= 0) {
@@ -255,13 +296,52 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
         setLockedIntent(lock);
       }
       setChainPhase("search");
-      const result = await searchOffers(buildSearchRequest(lock.intentId, parsed.data), apiFetch);
-      setSearchResult(result);
+      const empty = {
+        searchId: crypto.randomUUID(),
+        intentId: lock.intentId,
+        plan: { query: "…", country: "ALL" as const, sort: "relevance" as const },
+        offers: [] as RankedOffer[],
+        searchedAt: new Date().toISOString(),
+      };
+      setSearchResult(empty);
+      setPage("sort");
+      let latestOffers = empty.offers;
+      await streamPipeline(
+        {
+          ...buildSearchRequest(lock.intentId, parsed.data),
+          ...(publicIds.includes("budget") ? { disclosedBudgetKrw: String(maxBudget) } : {}),
+        },
+        (pipelineEvent) => {
+          if (pipelineEvent.type === "queries") {
+            setSearchResult((current) => {
+              if (!current) return current;
+              return { ...current, plan: { ...current.plan, query: pipelineEvent.queries.join(" · ") } };
+            });
+          }
+          if (pipelineEvent.type === "page") {
+            setSearchResult((current) => {
+              if (!current) return current;
+              const byId = new Map(current.offers.map((ranked) => [ranked.offer.offerId, ranked]));
+              for (const ranked of pipelineEvent.offers) byId.set(ranked.offer.offerId, ranked);
+              const offers = [...byId.values()].sort((left, right) =>
+                right.relevanceScore - left.relevanceScore
+                || left.offer.offerId.localeCompare(right.offer.offerId));
+              latestOffers = offers;
+              return {
+                ...current,
+                offers,
+                plan: { ...current.plan, query: pipelineEvent.query },
+              };
+            });
+          }
+        },
+        apiFetch,
+      );
       setSortMs(performance.now() - started);
-      const firstFit = result.offers.find(
+      const firstFit = latestOffers.find(
         ({ offer }) => offerFit(offer, maxBudget, form.requiredBy) === "fits",
       );
-      setSelectedOfferId(firstFit?.offer.offerId ?? result.offers[0]?.offer.offerId ?? null);
+      setSelectedOfferId(firstFit?.offer.offerId ?? latestOffers[0]?.offer.offerId ?? null);
       setConfirmed(false);
       setApproval(null);
       setPage("sort");
@@ -379,8 +459,11 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
       {page === "onboard" && (
         <OnboardPage
           walletAddress={serverWalletAddress}
-          walletReady={walletReady}
+          creatingWallet={creatingWallet}
+          jevKeyStored={jevKeyStored}
           error={error}
+          onCreateWallet={() => void createLocalWallet()}
+          onSaveJevKey={(apiKey) => void saveJevKey(apiKey)}
           onContinue={() => { setError(null); setPage("input"); }}
         />
       )}
@@ -392,7 +475,7 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
           phase={chainPhase === "search" ? "search" : chainPhase === "commit-range" ? "commit-range" : "idle"}
           error={error}
           onChange={updateField}
-          onSubmit={(event) => void handleSearch(event)}
+          onSubmit={(event, publicIds) => void handleSearch(event, publicIds)}
         />
       )}
       {page === "sort" && searchResult && (

@@ -17,20 +17,14 @@ const port = Number.parseInt(process.env.API_PORT ?? "3001", 10);
 const executionStorePath = process.env.EXECUTION_STORE_PATH
   ?? fileURLToPath(new URL("../data/executions.json", import.meta.url));
 const privyAppId = process.env.PRIVY_APP_ID?.trim();
-if (!privyAppId) {
-  throw new Error("PRIVY_APP_ID is required for the API");
-}
 const walletEncryptionKey = process.env.WALLET_ENCRYPTION_KEY?.trim();
-if (!walletEncryptionKey) {
-  throw new Error("WALLET_ENCRYPTION_KEY is required for the API");
-}
 const walletStorePath = process.env.WALLET_STORE_PATH
   ?? fileURLToPath(new URL("../data/wallets.json", import.meta.url));
 const app = buildApp({
-  authVerifier: createPrivyVerifier(privyAppId),
+  ...(privyAppId ? { authVerifier: createPrivyVerifier(privyAppId) } : {}),
   executionStore: new JsonFileExecutionStore(executionStorePath),
   walletStore: new JsonFileWalletStore(walletStorePath),
-  walletEncryptionKey,
+  ...(walletEncryptionKey ? { walletEncryptionKey } : {}),
   orderAdapter: createOrderAdapter(process.env),
   executionRetryPolicy: {
     maxRetries: Number.parseInt(process.env.ORDER_MAX_RETRIES ?? "2", 10),

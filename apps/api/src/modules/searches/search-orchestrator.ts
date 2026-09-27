@@ -20,6 +20,31 @@ function unique(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
+const STOP_WORDS = new Set(["the", "a", "an", "of", "and", "for", "to", "with"]);
+
+function words(value: string): string[] {
+  return value.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word.length > 1 && !STOP_WORDS.has(word));
+}
+
+export function queryCandidates(requirement: PublicRequirement): string[] {
+  const itemWords = words(requirement.item);
+  const keywordWords = requirement.keywords.flatMap(words);
+  const bigrams = itemWords.slice(0, -1).map((word, index) => `${word} ${itemWords[index + 1]}`);
+  return unique([
+    requirement.item,
+    requirement.keywords.join(" "),
+    ...itemWords,
+    ...keywordWords,
+    ...bigrams,
+  ]).slice(0, 8);
+}
+
+export type PipelineEvent =
+  | { type: "queries"; queries: string[] }
+  | { type: "page"; query: string; offers: SearchResponse["offers"] }
+  | { type: "done" }
+  | { type: "error"; message: string };
+
 function buildCandidates(requirement: PublicRequirement): SearchPlanCandidates {
   return {
     queries: unique([
@@ -64,5 +89,36 @@ export class SearchOrchestrator {
       offers: rankedOffers,
       searchedAt,
     });
+  }
+
+  async runPipeline(
+    request: SearchRequest & { disclosedBudgetKrw?: string },
+    emit: (event: PipelineEvent) => void,
+  ): Promise<void> {
+    const ordered = await this.dependencies.jev.orderQueries(
+      request.publicRequirement,
+      queryCandidates(request.publicRequirement),
+      request.disclosedBudgetKrw,
+    );
+    emit({ type: "queries", queries: ordered });
+    const seen = new Set<string>();
+    for (const query of ordered) {
+      const listings = await this.dependencies.catalog.search(
+        { query, country: "ALL", sort: "relevance" },
+        request.publicRequirement,
+      );
+      const fresh = listings.filter((listing) => !seen.has(listing.listingId));
+      for (const listing of fresh) seen.add(listing.listingId);
+      const offers = await Promise.all(fresh.map((listing) => mapCatalogListingToOffer(
+        listing,
+        request.publicRequirement,
+        { fetchedAt: this.dependencies.now(), krwPerCurrencyUnit: this.dependencies.krwPerCurrencyUnit },
+      )));
+      const ranked = offers.length === 0
+        ? []
+        : await this.dependencies.jev.rankOffers(request.publicRequirement, offers);
+      emit({ type: "page", query, offers: ranked });
+    }
+    emit({ type: "done" });
   }
 }

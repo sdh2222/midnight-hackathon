@@ -46,6 +46,7 @@ out/
 tmp/
 .cache/
 apps/api/data/
+apps/web/.local/
 
 # IDE
 .idea/
