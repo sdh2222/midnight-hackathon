@@ -12,6 +12,7 @@ import wasm from "vite-plugin-wasm";
 const walletFile = resolve(dirname(fileURLToPath(import.meta.url)), ".local/midnight-wallet.json");
 
 const jevKeyFile = resolve(dirname(fileURLToPath(import.meta.url)), ".local/jev-key");
+const reefKeyFile = resolve(dirname(fileURLToPath(import.meta.url)), ".local/reef-key");
 
 function localWallet(): Plugin {
   return {
@@ -31,12 +32,14 @@ function localWallet(): Plugin {
           res.end(JSON.stringify({ midnightAddress: record.midnightAddress }));
           return;
         }
-        if (path === "/local-jev-key" && req.method === "GET") {
+        if ((path === "/local-jev-key" || path === "/local-reef-key") && req.method === "GET") {
+          const file = path === "/local-jev-key" ? jevKeyFile : reefKeyFile;
           res.setHeader("content-type", "application/json");
-          res.end(JSON.stringify({ stored: existsSync(jevKeyFile) && readFileSync(jevKeyFile, "utf8").trim().length > 0 }));
+          res.end(JSON.stringify({ stored: existsSync(file) && readFileSync(file, "utf8").trim().length > 0 }));
           return;
         }
-        if (path === "/local-jev-key" && req.method === "POST") {
+        if ((path === "/local-jev-key" || path === "/local-reef-key") && req.method === "POST") {
+          const file = path === "/local-jev-key" ? jevKeyFile : reefKeyFile;
           void readRequestBody(req).then((raw) => {
             const parsed = JSON.parse(raw) as { apiKey?: string };
             const apiKey = parsed.apiKey?.trim() ?? "";
@@ -45,8 +48,8 @@ function localWallet(): Plugin {
               res.end(JSON.stringify({ error: "missing_key" }));
               return;
             }
-            mkdirSync(dirname(jevKeyFile), { recursive: true });
-            writeFileSync(jevKeyFile, apiKey, { mode: 0o600 });
+            mkdirSync(dirname(file), { recursive: true });
+            writeFileSync(file, apiKey, { mode: 0o600 });
             res.setHeader("content-type", "application/json");
             res.end(JSON.stringify({ stored: true }));
           }).catch(() => {

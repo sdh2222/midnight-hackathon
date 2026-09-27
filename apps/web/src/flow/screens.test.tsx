@@ -45,9 +45,11 @@ describe("buy pages", () => {
         walletAddress={null}
         creatingWallet={false}
         jevKeyStored={false}
+        reefKeyStored={false}
         error={null}
         onCreateWallet={() => undefined}
         onSaveJevKey={() => undefined}
+        onSaveReefKey={() => undefined}
         onContinue={() => undefined}
       />,
     );

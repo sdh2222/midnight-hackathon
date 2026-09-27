@@ -85,6 +85,7 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
   const [serverWalletAddress, setServerWalletAddress] = useState<string | null>(null);
   const [creatingWallet, setCreatingWallet] = useState(false);
   const [jevKeyStored, setJevKeyStored] = useState(false);
+  const [reefKeyStored, setReefKeyStored] = useState(false);
   const [sortMs, setSortMs] = useState<number | null>(null);
 
   useEffect(() => {
@@ -118,6 +119,11 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
       const body = await response.json() as { stored?: boolean };
       if (active && body.stored) setJevKeyStored(true);
     }).catch(() => undefined);
+    void fetch("/local-reef-key").then(async (response) => {
+      if (!response.ok) return;
+      const body = await response.json() as { stored?: boolean };
+      if (active && body.stored) setReefKeyStored(true);
+    }).catch(() => undefined);
     return () => { active = false; };
   }, []);
 
@@ -149,6 +155,20 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
       return;
     }
     setJevKeyStored(true);
+  }
+
+  async function saveReefKey(apiKey: string) {
+    setError(null);
+    const response = await fetch("/local-reef-key", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ apiKey }),
+    });
+    if (!response.ok) {
+      setError("The Reef key could not be stored.");
+      return;
+    }
+    setReefKeyStored(true);
   }
 
   const synchronizableExecutionIds = historyRecords
@@ -461,9 +481,11 @@ export function App({ userId, userLabel, apiFetch, onLogout }: {
           walletAddress={serverWalletAddress}
           creatingWallet={creatingWallet}
           jevKeyStored={jevKeyStored}
+          reefKeyStored={reefKeyStored}
           error={error}
           onCreateWallet={() => void createLocalWallet()}
           onSaveJevKey={(apiKey) => void saveJevKey(apiKey)}
+          onSaveReefKey={(apiKey) => void saveReefKey(apiKey)}
           onContinue={() => { setError(null); setPage("input"); }}
         />
       )}
