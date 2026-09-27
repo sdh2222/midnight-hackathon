@@ -2,6 +2,7 @@
 
 기업의 최대 예산을 공개하지 않고 AI가 B2B 공급처를 탐색·비교하도록 돕는
 private procurement workspace입니다.
+목적과 페인포인트는 [docs/product/toolkit.md](docs/product/toolkit.md)에 있습니다.
 
 페이지 순서와 각 버튼은 [docs/product/procurement-flow.md](docs/product/procurement-flow.md)에 있습니다.
 화면은 영어이고, 한 페이지에 결정 하나, 그다음 페이지로 넘어갑니다.

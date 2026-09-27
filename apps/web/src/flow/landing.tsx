@@ -1,100 +1,84 @@
-import { SortLoop } from "./sort-motion";
-
-const STATS = [
-  ["Sheet", "One supplier, then the next", "Copied into the next row by hand"],
-  ["Sourcenight", "One search", "The whole list comes back ordered"],
-  ["Cap", "Stays in this browser", "Locked with commitRange before Jev runs"],
-  ["Kept row", "commitVerify", "The fit, and nothing else"],
-] as const;
-
 const SENT = [
   ["Item", "What you are buying"],
   ["Quantity and unit", "How many, in piece, pair, box, or kg"],
   ["Destination", "Korea, the United States, Japan, or Singapore"],
   ["Keywords", "The words Jev searches with"],
-  ["Needed by", "Optional. Used only to reject a late delivery"],
 ] as const;
 
 const KEPT = [
-  ["Maximum budget", "KRW. Never sent to Jev"],
-  ["Salt", "Created in this browser. Not shown"],
-  ["commitRange", "Locks the cap before the search"],
-  ["commitVerify", "Checks the one row you keep"],
+  ["Maximum budget", "The amount you will pay. Never sent to Jev"],
+  ["Requirements you hold back", "Detail the search does not need"],
+  ["commitRange", "Locks those fields on this machine before the search"],
+  ["commitVerify", "Checks them here. The result is not sent back"],
 ] as const;
 
-const COLUMNS = [
-  ["Supplier", "Name on the listing", "Jev"],
-  ["Qty", "The buy, or the listing minimum when that is higher", "You, then the listing"],
-  ["Unit price", "Catalog currency, per unit", "The listing"],
-  ["Total", "Converted to KRW for the fit check", "Converted listing"],
-  ["Lead", "Days until it can ship", "The listing"],
-  ["Arrives", "Delivery date, checked against needed-by", "The listing"],
-  ["Score", "Relevance, and how sure Jev is", "Jev"],
-  ["Fit", "Within cap, over cap, or a missing date", "This browser"],
-] as const;
+function OpenButton({ login, loading }: { login?: () => void; loading: boolean }) {
+  if (!login) return null;
+  return (
+    <button className="hero-button" type="button" onClick={login} disabled={loading}>
+      {loading ? "Checking the session" : "Open Sourcenight"}
+    </button>
+  );
+}
 
 export function Landing({ login, loading = false }: { login?: () => void; loading?: boolean }) {
   return (
     <div className="landing">
       <header className="landing-top">
-        <span className="mark"><span className="mark-water">source</span>night</span>
+        <a className="land-mark" href="#top"><span>source</span>night</a>
         <nav className="landing-nav" aria-label="Sourcenight">
-          <a href="#how">How a buy runs</a>
-          <a href="#fields">The fields</a>
-          <a href="#list">The list</a>
+          <a href="#time">The time</a>
+          <a href="#private">The private buy</a>
+          <a href="#close">The list</a>
         </nav>
+        <OpenButton login={login} loading={loading} />
       </header>
 
-      <section className="hero">
-        <div className="hero-sky" aria-hidden="true" />
+      <section className="hero" id="top">
         <div className="hero-copy">
-          <h1>Stop pasting suppliers into a sheet.</h1>
-          <p className="hero-via">via Jev and Midnight</p>
+          <h1>Sourcing still takes the day.</h1>
+          <p className="hero-lede">
+            Suppliers are still sorted one by one. The search still sees more of the buy than it needs.
+          </p>
           <div className="hero-actions">
-            {login ? (
-              <button className="hero-button" type="button" onClick={login} disabled={loading}>
-                {loading ? "Checking the session" : "Open Sourcenight"}
-              </button>
-            ) : (
-              <p>Set <code>VITE_PRIVY_APP_ID</code> in the root <code>.env</code> before signing in.</p>
-            )}
-            <a className="hero-link" href="#how">How a buy runs</a>
+            <a className="hero-link" href="#time">The time</a>
+            <OpenButton login={login} loading={loading} />
           </div>
         </div>
       </section>
 
-      <section className="landing-section" id="how">
-        <h2>One search. The whole list.</h2>
-        <div className="land-panel">
-          <span className="land-tag">Jev.Sort</span>
-          <SortLoop total={6} fits={4} />
+      <section className="landing-section" id="time">
+        <div className="land-section-head">
+          <p className="land-index">01</p>
+          <h2>Less time on the list.</h2>
         </div>
-        <div className="land-stats">
-          {STATS.map(([name, value, note]) => (
-            <p key={name} className="land-stat">
-              <span className="land-stat-name">{name}</span>
-              <span className="land-stat-value">{value}</span>
-              <span className="land-stat-note">{note}</span>
-            </p>
-          ))}
-        </div>
-        <div className="landing-grid">
-          <ol className="landing-steps">
-            <li><strong>You enter the buy.</strong><span>Item, quantity, unit, country, keywords, a needed-by date, and a cap.</span></li>
-            <li><strong>commitRange locks the cap.</strong><span>The cap and its salt stay in this browser. The search body does not include them.</span></li>
-            <li><strong>Jev returns the rows in order.</strong><span>Supplier, quantity, unit price, total, lead, delivery, and score.</span></li>
-            <li><strong>commitVerify checks the row you keep.</strong><span>The list is that same order, with one row marked kept.</span></li>
-          </ol>
+        <div className="land-copy">
+          <p className="land-kicker">Jev.Sort</p>
           <p className="landing-body">
-            Searching each supplier and copying the row into a spreadsheet is the slow part. Sourcenight does that pass once. You still type the buy. Jev turns the public fields into a search and ranks what comes back. Midnight does not see the catalog. It checks whether the kept row fits the cap you already locked, and the proof does not reveal the cap. Sign-in is email or a social account through Privy. The page does not ask for a wallet seed, and it does not ask you to connect a Lace wallet.
+            Jev searches and ranks in one pass. That pass is the labor of sorting suppliers by hand, and the labor of a general model fetching the web to build the same list. What comes back is ordered. Each row has its unit price.
           </p>
+          <dl className="land-compare">
+            <div>
+              <dt>By hand</dt>
+              <dd>One supplier, then the next, copied into a sheet.</dd>
+            </div>
+            <div>
+              <dt>A general model</dt>
+              <dd>Fetch the web, then sort the pages it read.</dd>
+            </div>
+          </dl>
         </div>
       </section>
 
-      <section className="land-band">
-        <div className="landing-section">
-          <h2>The cap never leaves this browser.</h2>
-          <p className="land-sub">Jev ranks the public buy. Midnight checks the row you keep.</p>
+      <section className="landing-section" id="private">
+        <div className="land-section-head">
+          <p className="land-index">02</p>
+          <h2>The private buy never reaches the agent.</h2>
+        </div>
+        <div className="land-copy">
+          <p className="landing-body">
+            The amount you will pay, and the requirements you want hidden, stay on this machine. Jev receives only the public fields the search needs, and it ranks from those alone. It does not learn the rest. Midnight checks the private fields here. That result is not sent back to Jev. No other agent can read them.
+          </p>
           <div className="land-doors">
             <div className="land-panel">
               <span className="land-tag">Sent to Jev</span>
@@ -107,7 +91,7 @@ export function Landing({ login, loading = false }: { login?: () => void; loadin
                 ))}
               </dl>
             </div>
-            <div className="land-panel">
+            <div className="land-panel land-panel-keep">
               <span className="land-tag">Stays here</span>
               <dl className="land-facts">
                 {KEPT.map(([name, note]) => (
@@ -119,81 +103,34 @@ export function Landing({ login, loading = false }: { login?: () => void; loadin
               </dl>
             </div>
           </div>
-          <p className="landing-body land-band-body">
-            A failed search clears the lock, so you can edit the buy and try again. After a lock, the public fields stay as entered until you start a new buy. Past buys store the offer, the commitVerify id, and the order status. They do not store the cap.
+        </div>
+      </section>
+
+      <section className="landing-section" id="close">
+        <div className="land-section-head">
+          <p className="land-index">03</p>
+          <h2>You leave with the order Jev made.</h2>
+        </div>
+        <div className="land-copy">
+          <p className="landing-body">
+            The list is ranked. The private check already happened on this machine, and the agent does not receive it.
           </p>
-        </div>
-      </section>
-
-      <section className="landing-section" id="fields">
-        <h2>What each column is.</h2>
-        <div className="v-table-wrap land-table">
-          <table className="v-table">
-            <thead>
-              <tr>
-                <th>Column</th>
-                <th>What it shows</th>
-                <th>Where it comes from</th>
-              </tr>
-            </thead>
-            <tbody>
-              {COLUMNS.map(([column, shows, from]) => (
-                <tr key={column}>
-                  <td>{column}</td>
-                  <td>{shows}</td>
-                  <td className="v-muted">{from}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="landing-section" id="list">
-        <h2>You leave with the list.</h2>
-        <p className="land-sub">One kept row. The rest of the order still there.</p>
-        <div className="land-doors">
-          <div className="land-panel">
-            <span className="land-tag">Buyer</span>
-            <div className="land-door">
-              <h3>Open a buy</h3>
-              <ol className="land-door-steps">
-                <li>Sign in. Sourcenight creates one Midnight address for that login.</li>
-                <li>Enter the buy. Lock the cap. Jev sorts.</li>
-                <li>Keep one row that fits. Open the list.</li>
-              </ol>
-              {login ? (
-                <button className="hero-button" type="button" onClick={login} disabled={loading}>
-                  {loading ? "Checking the session" : "Open Sourcenight"}
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <div className="land-panel">
-            <span className="land-tag">List</span>
-            <div className="land-door">
-              <h3>What you keep</h3>
-              <ol className="land-door-steps">
-                <li>Every offer Jev returned, in that order.</li>
-                <li>The row commitVerify accepted, marked kept.</li>
-                <li>Past buys, when you want the earlier orders. The cap is not in them.</li>
-              </ol>
-              <a className="hero-link" href="#how">How a buy runs</a>
-            </div>
+          <div className="hero-actions">
+            <OpenButton login={login} loading={loading} />
           </div>
         </div>
       </section>
 
       <footer className="land-footer">
         <div className="land-footer-row">
-          <span className="mark"><span className="mark-water">source</span>night</span>
+          <a className="land-mark" href="#top"><span>source</span>night</a>
           <nav className="landing-nav" aria-label="Footer">
-            <a href="#how">How a buy runs</a>
-            <a href="#fields">The fields</a>
-            <a href="#list">The list</a>
+            <a href="#time">The time</a>
+            <a href="#private">The private buy</a>
+            <a href="#close">The list</a>
           </nav>
         </div>
-        <p className="land-footer-note">Built on Jev for the search, Midnight for the fit check, and Privy for sign-in.</p>
+        <p className="land-footer-note">Jev ranks the public search. Midnight checks the private buy on this machine.</p>
       </footer>
     </div>
   );

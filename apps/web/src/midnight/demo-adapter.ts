@@ -28,7 +28,7 @@ export class DemoIntentContractAdapter implements IntentContractAdapter {
   async connectWallet(): Promise<WalletConnection> {
     this.connected = true;
     return {
-      walletName: "Demo Lace",
+      walletName: "Sourcenight prover",
       address: "mn_addr_demo_7x4k…p91c",
       networkId: "undeployed",
       mode: "demo",

@@ -1,11 +1,12 @@
-import type { Offer, PublicRequirement } from "@midnight-hackathon/shared";
 import {
   ZERO_BYTES_32,
   dateToUnixDay,
   hashToBytes,
   hexToBytes,
-  randomBytes32,
-} from "./encoding";
+  type Offer,
+  type PublicRequirement,
+} from "@midnight-hackathon/shared";
+import { randomBytes32 } from "./encoding";
 import type { PrivateIntentVault } from "./private-vault";
 import type {
   IntentContractAdapter,

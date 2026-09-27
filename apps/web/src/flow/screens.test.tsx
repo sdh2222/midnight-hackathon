@@ -41,11 +41,20 @@ const result: SearchResponse = {
 describe("buy pages", () => {
   it("starts on onboard and continues into the buy", () => {
     const html = renderToStaticMarkup(
-      <OnboardPage walletAddress="mn_addr_undeployed1example" walletReady error={null} onContinue={() => undefined} />,
+      <OnboardPage
+        walletAddress={null}
+        creatingWallet={false}
+        jevKeyStored={false}
+        error={null}
+        onCreateWallet={() => undefined}
+        onSaveJevKey={() => undefined}
+        onContinue={() => undefined}
+      />,
     );
-    expect(html).toContain("Continue");
-    expect(html).toContain("mn_addr_undeployed1example");
-    expect(html).toContain("You do not paste a seed.");
+    expect(html).toContain("This repo");
+    expect(html).toContain("We will");
+    expect(html).toContain("Create wallet");
+    expect(html).not.toContain("Seed");
   });
 
   it("shows the Jev order and asks to verify the fitting row", () => {

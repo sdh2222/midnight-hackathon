@@ -30,7 +30,7 @@ import {
   InMemoryExecutionStore,
   type ExecutionStore,
 } from "./modules/executions/execution-store.js";
-import { SearchOrchestrator } from "./modules/searches/search-orchestrator.js";
+import { SearchOrchestrator, type PipelineEvent } from "./modules/searches/search-orchestrator.js";
 import { deriveMidnightAddress } from "./modules/wallets/derive-address.js";
 import { InMemoryWalletStore, type WalletStore } from "./modules/wallets/wallet-store.js";
 import { WalletService } from "./modules/wallets/wallet-service.js";
@@ -149,6 +149,31 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
     const result = await orchestrator.search(parsed.data);
     return reply.code(200).send(result);
+  });
+
+  app.post("/v1/pipeline", async (request, reply) => {
+    const body = request.body as { disclosedBudgetKrw?: string };
+    const parsed = SearchRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "invalid_search_request" });
+    }
+    const disclosed = typeof body.disclosedBudgetKrw === "string" ? body.disclosedBudgetKrw : undefined;
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-cache",
+    });
+    const send = (event: PipelineEvent) => {
+      reply.raw.write(`${JSON.stringify(event)}\n`);
+    };
+    try {
+      await orchestrator.runPipeline({ ...parsed.data, ...(disclosed ? { disclosedBudgetKrw: disclosed } : {}) }, send);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The pipeline failed.";
+      send({ type: "error", message });
+    } finally {
+      reply.raw.end();
+    }
   });
 
   app.post("/v1/executions", async (request, reply) => {

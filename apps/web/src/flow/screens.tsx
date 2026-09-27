@@ -1,9 +1,8 @@
-import type { CSSProperties, FormEvent, ReactNode } from "react";
+import { useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import type { ExecutionHistoryRecord, RankedOffer, SearchResponse } from "@midnight-hackathon/shared";
 import type { LockedIntent } from "../midnight";
 import { offerFit, type Fit } from "./fit";
 import { FIT_WORD, SORT_WORD, STATUS_WORD, compactHash, number, percent, seconds, won } from "./format";
-import { SortMotion } from "./sort-motion";
 
 export const STEPS = [
   { id: "onboard", label: "Onboard" },
@@ -16,12 +15,35 @@ export const STEPS = [
 export type StepId = (typeof STEPS)[number]["id"];
 export type PageId = StepId | "history";
 
-const COUNTRY: Record<string, string> = {
-  KR: "Korea",
-  US: "United States",
-  JP: "Japan",
-  SG: "Singapore",
+export type BuyFieldId = "item" | "quantity" | "unit" | "destination" | "keywords" | "neededBy" | "budget";
+
+const FIELD_LABEL: Record<BuyFieldId, string> = {
+  item: "Item",
+  quantity: "Quantity",
+  unit: "Unit",
+  destination: "Ship to",
+  keywords: "Keywords",
+  neededBy: "Needed by",
+  budget: "Maximum budget",
 };
+
+const DEFAULT_PUBLIC: BuyFieldId[] = ["item", "quantity", "unit", "destination", "keywords", "neededBy"];
+const DEFAULT_PRIVATE: BuyFieldId[] = ["budget"];
+
+function placeField(
+  columns: { publicIds: BuyFieldId[]; privateIds: BuyFieldId[] },
+  id: BuyFieldId,
+  side: "public" | "private",
+  index: number,
+) {
+  const publicIds = columns.publicIds.filter((field) => field !== id);
+  const privateIds = columns.privateIds.filter((field) => field !== id);
+  const next = side === "public" ? publicIds : privateIds;
+  next.splice(index, 0, id);
+  return side === "public"
+    ? { publicIds, privateIds }
+    : { publicIds, privateIds };
+}
 
 export type IntentForm = {
   item: string;
@@ -65,7 +87,7 @@ function Metric({ label, value, hint }: { label: string; value: string; hint: st
     <div className="v-metric">
       <span className="v-label">{label}</span>
       <span className="v-figure">{value}</span>
-      <span className="v-hint">{hint}</span>
+      {hint ? <span className="v-hint">{hint}</span> : null}
     </div>
   );
 }
@@ -76,7 +98,6 @@ export function Shell({
   onStep,
   onHistory,
   onLogout,
-  userLabel,
   walletAddress,
   children,
 }: {
@@ -116,7 +137,6 @@ export function Shell({
             </button>
           ))}
           <div className="desk-end">
-            <span className="v-muted">{userLabel}</span>
             <button className="nav-link" type="button" aria-current={page === "history" ? "page" : undefined} onClick={onHistory}>Past buys</button>
             <button className="nav-link" type="button" onClick={onLogout}>Sign out</button>
           </div>
@@ -131,49 +151,137 @@ export function Shell({
 
 export function OnboardPage({
   walletAddress,
-  walletReady,
+  creatingWallet,
+  jevKeyStored,
   error,
+  onCreateWallet,
+  onSaveJevKey,
   onContinue,
 }: {
   walletAddress: string | null;
-  walletReady: boolean;
+  creatingWallet: boolean;
+  jevKeyStored: boolean;
   error: string | null;
+  onCreateWallet: () => void;
+  onSaveJevKey: (apiKey: string) => void;
   onContinue: () => void;
 }) {
   return (
     <>
       <PageHead
-        title="Sourcenight"
-        description="This login already has a Midnight address. Sourcenight creates it for the account and keeps the seed on the server. You do not paste a seed, and this page does not ask for one. Continue opens the buy. Nothing is searched until the next page locks the cap and sends only the public fields to Jev."
+        title="This toolkit"
+        description="What this repo does, and what we will add."
       />
-      <div className="pair">
-        <Card
-          title="This login"
-          footer={(
-            <button className="v-btn" type="button" disabled={!walletReady || !walletAddress} onClick={onContinue}>
-              Continue
-            </button>
-          )}
-        >
-          <dl className="v-dl">
-            <dt>Account</dt><dd>Privy, by email or a social account</dd>
-            <dt>Midnight address</dt>
-            <dd className="v-mono" title={walletAddress ?? undefined}>{walletAddress ?? "Preparing the wallet for this account."}</dd>
-            <dt>Seed</dt><dd>Created for this login. You do not paste a seed.</dd>
-            <dt>Continue</dt><dd>Opens the buy. The search has not started.</dd>
-          </dl>
-          {error ? <p className="v-note bad" role="alert">{error}</p> : null}
-        </Card>
-        <Card title="In plain English">
-          <ol className="v-list">
-            <li>You sign in. Sourcenight creates one Midnight address for that login.</li>
-            <li>You enter the buy. Jev receives the item, the quantity, the unit, the country, and the keywords.</li>
-            <li>The cap is locked with commitRange before the search. Jev does not receive it.</li>
-            <li>You keep one row. commitVerify checks that it fits, and the list marks that row.</li>
-          </ol>
-        </Card>
-      </div>
+      <Card title="This repo">
+        <ol className="v-list">
+          <li>Runs on this machine. It is not a hosted site.</li>
+          <li>Creates one Midnight wallet here and shows the address.</li>
+          <li>Takes one buy. Item, quantity, unit, destination, keywords, and needed-by go to Jev. The budget stays here.</li>
+          <li>Locks the budget with commitRange, then asks Jev, through TypeSafe, to choose a query and rank the rows.</li>
+          <li>Checks the row you keep with commitVerify. The list marks that row kept. The check is not sent back to Jev.</li>
+          <li>Does not run a local agent. The screen splits the fields. The API calls Jev. The prover checks the budget.</li>
+        </ol>
+      </Card>
+      <Card title="We will">
+        <ol className="v-list">
+          <li>Create the wallet when you press the button.</li>
+          <li>Take the Jev key once and keep it on this machine, not on screen.</li>
+          <li>Let you drag the buy fields. Order is priority. One side is public, the other stays private.</li>
+          <li>Send only the public side to Jev with one fixed prompt: make the search queries.</li>
+          <li>Query with those terms. As each page arrives, Jev ranks it, the mapper maps it, and Midnight checks it against the private fields.</li>
+          <li>Show that in two columns. Rows stack and reorder as they arrive. The right column is what Midnight accepted.</li>
+        </ol>
+      </Card>
+      <Card
+        title="Midnight wallet"
+        footer={walletAddress ? (
+          <button className="v-btn" type="button" disabled={!jevKeyStored} onClick={onContinue}>Continue</button>
+        ) : (
+          <button className="v-btn" type="button" disabled={creatingWallet} onClick={onCreateWallet}>
+            {creatingWallet ? "Creating the wallet" : "Create wallet"}
+          </button>
+        )}
+      >
+        {walletAddress ? (
+          <p className="v-mono" title={walletAddress}>{walletAddress}</p>
+        ) : (
+          <p className="v-desc">No wallet yet. Create one on this machine before the buy.</p>
+        )}
+        {error ? <p className="v-note bad" role="alert">{error}</p> : null}
+      </Card>
+      {walletAddress ? (
+        <JevKeyCard stored={jevKeyStored} onSave={onSaveJevKey} />
+      ) : null}
     </>
+  );
+}
+
+function FieldBoard({
+  columns,
+  onPlace,
+}: {
+  columns: { publicIds: BuyFieldId[]; privateIds: BuyFieldId[] };
+  onPlace: (id: BuyFieldId, side: "public" | "private", index: number) => void;
+}) {
+  const column = (side: "public" | "private", ids: BuyFieldId[]) => (
+    <div
+      className={side === "private" ? "field-column private" : "field-column"}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        onPlace(event.dataTransfer.getData("text/plain") as BuyFieldId, side, ids.length);
+      }}
+    >
+      <p className={side === "private" ? "v-kicker keep" : "v-kicker"}>{side === "public" ? "Public" : "Private"}</p>
+      {ids.map((id, index) => (
+        <button
+          key={id}
+          className="field-chip"
+          type="button"
+          draggable
+          onDragStart={(event) => event.dataTransfer.setData("text/plain", id)}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onPlace(event.dataTransfer.getData("text/plain") as BuyFieldId, side, index);
+          }}
+        >
+          {index + 1}. {FIELD_LABEL[id]}
+        </button>
+      ))}
+    </div>
+  );
+  return (
+    <div className="field-board">
+      {column("public", columns.publicIds)}
+      {column("private", columns.privateIds)}
+    </div>
+  );
+}
+
+function JevKeyCard({ stored, onSave }: { stored: boolean; onSave: (apiKey: string) => void }) {
+  const [draft, setDraft] = useState("");
+  return (
+    <Card title="Jev key">
+      {stored ? (
+        <p className="v-desc">Stored on this machine. It is not shown again.</p>
+      ) : (
+        <form className="v-fields" onSubmit={(event) => {
+          event.preventDefault();
+          const apiKey = draft.trim();
+          if (!apiKey) return;
+          onSave(apiKey);
+          setDraft("");
+        }}>
+          <label className="v-field">
+            <span>TypeSafe key for Jev</span>
+            <input className="v-input" type="password" autoComplete="off" value={draft} onChange={(event) => setDraft(event.target.value)} />
+          </label>
+          <button className="v-btn" type="submit" disabled={draft.trim().length === 0}>Store the key</button>
+        </form>
+      )}
+    </Card>
   );
 }
 
@@ -192,8 +300,9 @@ export function InputPage({
   phase: "idle" | "commit-range" | "search";
   error: string | null;
   onChange: (field: keyof IntentForm, value: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>, publicIds: BuyFieldId[]) => void;
 }) {
+  const [columns, setColumns] = useState({ publicIds: DEFAULT_PUBLIC, privateIds: DEFAULT_PRIVATE });
   const button = searching
     ? (phase === "search" ? "Jev is sorting" : "Locking the cap")
     : "Sort offers";
@@ -201,23 +310,19 @@ export function InputPage({
     <>
       <PageHead
         title="What are you buying?"
-        description="Jev receives the item, the quantity, the unit, the destination country, and the keywords. It does not receive the cap. Sort offers locks that cap with commitRange first, then runs the search. After a lock, the public fields stay as entered until New buy. A failed search clears the lock so you can edit and try again."
+        description="Jev gets the buy. The budget stays here."
       />
-      <form onSubmit={onSubmit}>
-        <div className="wizard">
-        <Card title="Steps">
-          <ol className="step-list">
-            <li data-state="current"><span className="step-no">1</span><span className="step-copy"><strong>Buy</strong><span>Public fields go to Jev. The cap stays in this browser.</span></span></li>
-            <li><span className="step-no">2</span><span className="step-copy"><strong>Sort</strong><span>commitRange locks the cap, then Jev returns the rows in order.</span></span></li>
-            <li><span className="step-no">3</span><span className="step-copy"><strong>Verify</strong><span>You pick one row. commitVerify checks that it fits.</span></span></li>
-            <li><span className="step-no">4</span><span className="step-copy"><strong>List</strong><span>The same order, with that row marked kept.</span></span></li>
-          </ol>
-        </Card>
+      <form onSubmit={(event) => onSubmit(event, columns.publicIds)}>
+        <FieldBoard
+          columns={columns}
+          onPlace={(id, side, index) => setColumns((current) => placeField(current, id, side, index))}
+        />
         <Card
           title="This buy"
           footer={<button className="v-btn" type="submit" disabled={searching}>{button}</button>}
         >
           <div className="v-fields">
+            <p className="v-kicker">Sent to Jev</p>
             <label className="v-field">
               <span>Item</span>
               <input className="v-input" value={form.item} onChange={(event) => onChange("item", event.target.value)} disabled={locked} required />
@@ -256,35 +361,69 @@ export function InputPage({
                 <input className="v-input" type="date" value={form.requiredBy} onChange={(event) => onChange("requiredBy", event.target.value)} disabled={locked} />
               </label>
             </div>
-            <label className="v-field">
-              <span>Maximum budget, KRW</span>
-              <input
-                className="v-input"
-                aria-label="Maximum budget in KRW"
-                type="number"
-                min="1"
-                value={form.priceMaxKrw}
-                onChange={(event) => onChange("priceMaxKrw", event.target.value)}
-                disabled={locked}
-              />
-            </label>
-            <p className="v-desc">Stays in this browser. Jev does not receive it. The salt that hides it is created here and is not shown.</p>
+            <div className="v-private">
+              <p className="v-kicker keep">Stays here</p>
+              <label className="v-field">
+                <span>Maximum budget, KRW</span>
+                <input
+                  className="v-input"
+                  aria-label="Maximum budget in KRW"
+                  type="number"
+                  min="1"
+                  value={form.priceMaxKrw}
+                  onChange={(event) => onChange("priceMaxKrw", event.target.value)}
+                  disabled={locked}
+                />
+              </label>
+            </div>
             {error ? <p className="v-note bad" role="alert">{error}</p> : null}
           </div>
         </Card>
-        <Card title="What leaves this browser">
-          <dl className="v-dl">
-            <dt>Item</dt><dd>{form.item || "—"}</dd>
-            <dt>Quantity</dt><dd>{form.quantity ? `${number(Number(form.quantity))} ${form.unit}` : "—"}</dd>
-            <dt>Ship to</dt><dd>{COUNTRY[form.destinationCountry] ?? form.destinationCountry}</dd>
-            <dt>Keywords</dt><dd>{form.keywords || "—"}</dd>
-            <dt>Needed by</dt><dd>{form.requiredBy || "No date set"}</dd>
-            <dt>Cap</dt><dd>{form.priceMaxKrw ? `${won(form.priceMaxKrw)} · stays here` : "—"}</dd>
-          </dl>
-        </Card>
-        </div>
       </form>
     </>
+  );
+}
+
+function RankColumn({
+  title,
+  offers,
+  capKrw,
+  requiredBy,
+  selectedId,
+  onSelect,
+}: {
+  title: string;
+  offers: readonly RankedOffer[];
+  capKrw: number;
+  requiredBy: string;
+  selectedId: string | null;
+  onSelect: (offerId: string) => void;
+}) {
+  return (
+    <section className="rank-column">
+      <h2>{title}</h2>
+      {offers.length === 0 ? <p className="v-desc">Waiting for the next page.</p> : (
+        <ol className="rank-list">
+          {offers.map((ranked, index) => {
+            const fit = offerFit(ranked.offer, capKrw, requiredBy);
+            const selected = selectedId === ranked.offer.offerId;
+            return (
+              <li key={ranked.offer.offerId}>
+                <button
+                  className={selected ? "rank-row selected" : "rank-row"}
+                  type="button"
+                  onClick={() => onSelect(ranked.offer.offerId)}
+                >
+                  <span>{index + 1}</span>
+                  <strong>{ranked.offer.title}</strong>
+                  <span>{won(ranked.offer.convertedTotalKrw)} · {FIT_WORD[fit]}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
   );
 }
 
@@ -378,7 +517,6 @@ export function SortPage({
   requiredBy,
   selectedId,
   elapsedMs,
-  locked,
   onSelect,
   onEdit,
   onVerify,
@@ -400,16 +538,33 @@ export function SortPage({
     <>
       <PageHead
         title="Jev sorted this buy."
-        description={`Jev searched “${result.plan.query}” in ${result.plan.country} and returned these rows by ${SORT_WORD[result.plan.sort] ?? result.plan.sort}. The cap was not in that request. A row is within cap when its converted total is at or under the cap you locked, and, if you set a needed-by date, its delivery is on or before that date. The motion under the title is that sort: offers come off the rule, flick through order, and the ones that stay drop into a stack. Verify this row sends the selected offer to the mapper. The mapper checks the fit and does not reveal the cap.`}
+        description={`Jev searched “${result.plan.query}”. Pick a row within the cap.`}
       />
-      {result.offers.length > 0 ? <SortMotion total={result.offers.length} fits={fits} /> : null}
-      <div className={result.offers.length > 0 ? "sort-settle" : undefined}>
+      <div className="rank-board">
+        <RankColumn
+          title="Jev rank"
+          offers={result.offers}
+          capKrw={capKrw}
+          requiredBy={requiredBy}
+          selectedId={selectedId}
+          onSelect={onSelect}
+        />
+        <RankColumn
+          title="Midnight"
+          offers={result.offers.filter((ranked) => offerFit(ranked.offer, capKrw, requiredBy) === "fits")}
+          capKrw={capKrw}
+          requiredBy={requiredBy}
+          selectedId={selectedId}
+          onSelect={onSelect}
+        />
+      </div>
+      <div>
         <Card flush>
           <div className="v-metrics">
-            <Metric label="Offers" value={String(result.offers.length)} hint="Rows Jev returned for this search" />
-            <Metric label="Within cap" value={String(fits)} hint="Converted total at or under the locked cap" />
-            <Metric label="Cap" value={won(capKrw)} hint="Locked with commitRange. Not sent to Jev." />
-            <Metric label="Sort time" value={elapsedMs == null ? "—" : seconds(elapsedMs)} hint="From the search request to this list" />
+            <Metric label="Offers" value={String(result.offers.length)} hint="" />
+            <Metric label="Within cap" value={String(fits)} hint="" />
+            <Metric label="Cap" value={won(capKrw)} hint="" />
+            <Metric label="Sort time" value={elapsedMs == null ? "—" : seconds(elapsedMs)} hint="" />
           </div>
         </Card>
         <Card
@@ -435,7 +590,6 @@ export function SortPage({
             />
           )}
         </Card>
-        {locked ? <p className="v-muted">Cap locked · {compactHash(locked.commitRangeTransactionId)}</p> : null}
         {selectedFit && selectedFit !== "fits" ? (
           <p className="v-note bad">{FIT_WORD[selectedFit]}. Pick a row that fits before verifying.</p>
         ) : null}
@@ -474,21 +628,15 @@ export function VerifyPage({
     <>
       <PageHead
         title="Check that this row fits."
-        description="The mapper compares this offer with the cap locked by commitRange. The check is commitVerify. It says whether the row fits. It does not reveal the cap, and it does not send the cap to Jev. The local fit on the right uses the same rule as the sort page: the converted total is at or under the cap, and the delivery is on or before the needed-by date when you set one. Check the fit only after you accept the supplier, the total, and the date."
+        description="Midnight checks this row against the cap. The cap is not sent to Jev."
       />
       <div className="pair">
         <Card title="This row">
           <dl className="v-dl">
             <dt>Offer</dt><dd>{ranked.offer.title}</dd>
-            <dt>Variant</dt><dd>{ranked.offer.variant ?? "—"}</dd>
             <dt>Supplier</dt><dd>{ranked.offer.supplierName ?? ranked.offer.supplierId}</dd>
-            <dt>Quantity</dt><dd>{number(ranked.offer.quantity)} {ranked.offer.unit}</dd>
-            <dt>Unit price</dt><dd>{ranked.offer.originalCurrency} {ranked.offer.originalUnitPrice}</dd>
             <dt>Total</dt><dd>{won(ranked.offer.convertedTotalKrw)}</dd>
-            <dt>Lead</dt><dd>{ranked.offer.leadTimeDays === undefined ? "—" : `${ranked.offer.leadTimeDays} days`}</dd>
             <dt>Arrives</dt><dd>{ranked.offer.deliveryDate ?? "—"}{requiredBy ? ` · needed by ${requiredBy}` : ""}</dd>
-            <dt>Score</dt><dd>{percent(ranked.relevanceScore)} relevant · {percent(ranked.confidence)} sure{ranked.needsReview ? " · needs review" : ""}</dd>
-            <dt>Source</dt><dd className="v-mono" title={ranked.offer.sourceId}>{ranked.offer.provider} · {compactHash(ranked.offer.sourceId)}</dd>
           </dl>
         </Card>
         <Card
@@ -526,7 +674,6 @@ export function ListPage({
   capKrw,
   requiredBy,
   keptId,
-  elapsedMs,
   orderNote,
   onNew,
   onHistory,
@@ -540,21 +687,12 @@ export function ListPage({
   onNew: () => void;
   onHistory: () => void;
 }) {
-  const fits = result.offers.filter((ranked) => offerFit(ranked.offer, capKrw, requiredBy) === "fits").length;
   return (
     <>
       <PageHead
         title="The sorted list, with one row kept."
-        description={`${orderNote} This is the same order Jev returned. The kept row is the one commitVerify accepted. The cap is still only in this browser, and this page does not search again.`}
+        description={orderNote}
       />
-      <Card flush>
-        <div className="v-metrics">
-          <Metric label="Offers" value={String(result.offers.length)} hint="Rows in the search result, unchanged" />
-          <Metric label="Within cap" value={String(fits)} hint="Converted total at or under the locked cap" />
-          <Metric label="Cap" value={won(capKrw)} hint="Still only in this browser" />
-          <Metric label="Sort time" value={elapsedMs == null ? "—" : seconds(elapsedMs)} hint="From the search request to the list" />
-        </div>
-      </Card>
       <Card
         title="Final"
         flush

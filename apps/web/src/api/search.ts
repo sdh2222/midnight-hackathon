@@ -1,7 +1,9 @@
 import {
+  RankedOfferSchema,
   SearchRequestSchema,
   SearchResponseSchema,
   type PublicRequirement,
+  type RankedOffer,
   type SearchRequest,
   type SearchResponse,
 } from "@midnight-hackathon/shared";
@@ -40,4 +42,47 @@ export async function searchOffers(
   }
 
   return SearchResponseSchema.parse(await response.json());
+}
+
+export type PipelineEvent =
+  | { type: "queries"; queries: string[] }
+  | { type: "page"; query: string; offers: RankedOffer[] }
+  | { type: "done" }
+  | { type: "error"; message: string };
+
+export async function streamPipeline(
+  request: SearchRequest & { disclosedBudgetKrw?: string },
+  onEvent: (event: PipelineEvent) => void,
+  fetchImplementation: typeof globalThis.fetch = globalThis.fetch,
+): Promise<void> {
+  const response = await fetchImplementation(
+    `${import.meta.env.VITE_API_BASE_URL ?? ""}/v1/pipeline`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    },
+  );
+  if (!response.ok || !response.body) {
+    throw new Error("후보 검색에 실패했습니다.");
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const event = JSON.parse(line) as PipelineEvent;
+      if (event.type === "page") {
+        event.offers = event.offers.map((offer) => RankedOfferSchema.parse(offer));
+      }
+      onEvent(event);
+      if (event.type === "error") throw new Error(event.message);
+    }
+  }
 }
