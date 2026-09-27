@@ -27,8 +27,10 @@ function buildCandidates(requirement: PublicRequirement): SearchPlanCandidates {
       requirement.item,
       `${requirement.item} ${requirement.keywords[0] ?? ""}`,
     ]),
-    countries: ["ALL", requirement.destinationCountry],
-    sorts: ["relevance", "price_asc", "lead_time_asc"],
+    // destinationCountry is the buyer's destination, not the supplier's origin.
+    countries: ["ALL"],
+    // Reef's Alibaba search supports relevance, sales and response rate, not price or lead-time sort.
+    sorts: ["relevance"],
   };
 }
 

@@ -4,9 +4,16 @@ import {
   Bytes32HexSchema,
   CreateExecutionHistorySchema,
   SearchRequestSchema,
+  sha256Hex,
   type ExecutionHistoryRecord,
 } from "@midnight-hackathon/shared";
-import { MockAlibabaCatalog } from "./integrations/alibaba/mock-catalog.js";
+import type { AuthVerifier } from "./auth/privy-verifier.js";
+import type { CatalogProvider } from "./integrations/alibaba/catalog-provider.js";
+import {
+  createCatalogProvider,
+  type CatalogEnvironment,
+} from "./integrations/alibaba/create-catalog-provider.js";
+import { ReefCatalogError } from "./integrations/alibaba/reef-catalog.js";
 import {
   createJevProvider,
   type JevEnvironment,
@@ -24,11 +31,19 @@ import {
 } from "./modules/executions/execution-store.js";
 import { SearchOrchestrator } from "./modules/searches/search-orchestrator.js";
 
+declare module "fastify" {
+  interface FastifyRequest {
+    authAccountIdHash?: string;
+  }
+}
+
 export type BuildAppOptions = {
   now?: () => string;
   createId?: () => string;
-  environment?: JevEnvironment;
+  environment?: JevEnvironment & CatalogEnvironment;
   fetch?: typeof globalThis.fetch;
+  catalog?: CatalogProvider;
+  authVerifier?: AuthVerifier;
   executionStore?: ExecutionStore;
   orderAdapter?: OrderAdapter;
   executionRetryPolicy?: Partial<ExecutionRetryPolicy>;
@@ -50,7 +65,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     ...(options.executionWait ? { wait: options.executionWait } : {}),
   });
   const orchestrator = new SearchOrchestrator({
-    catalog: new MockAlibabaCatalog(),
+    catalog: options.catalog ?? createCatalogProvider(
+      options.environment ?? process.env,
+      options.fetch,
+    ),
     jev: createJevProvider(options.environment ?? process.env, options.fetch),
     now,
     createId,
@@ -60,12 +78,28 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
   app.get("/health", async () => ({ status: "ok" }));
 
+  app.addHook("onRequest", async (request, reply) => {
+    if (!options.authVerifier || !request.url.startsWith("/v1/")) return;
+    const match = /^Bearer (\S+)$/i.exec(request.headers.authorization ?? "");
+    if (!match?.[1]) {
+      return reply.code(401).send({ error: "authentication_required" });
+    }
+    try {
+      request.authAccountIdHash = await sha256Hex(`privy:${await options.authVerifier(match[1])}`);
+    } catch {
+      return reply.code(401).send({ error: "invalid_access_token" });
+    }
+  });
+
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof JevProviderError) {
       return reply.code(502).send({
         error: "jev_provider_error",
         message: "Jev could not evaluate the search request",
       });
+    }
+    if (error instanceof ReefCatalogError) {
+      return reply.code(502).send({ error: error.code, message: error.message });
     }
     return reply.send(error);
   });
@@ -98,6 +132,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       });
     }
 
+    if (request.authAccountIdHash && parsed.data.accountIdHash !== request.authAccountIdHash) {
+      return reply.code(403).send({ error: "account_mismatch" });
+    }
+
     const timestamp = now();
     const record: ExecutionHistoryRecord = {
       ...parsed.data,
@@ -121,6 +159,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     if (!parsedAccount.success) {
       return reply.code(400).send({ error: "invalid_account_id_hash" });
     }
+    if (request.authAccountIdHash && parsedAccount.data !== request.authAccountIdHash) {
+      return reply.code(403).send({ error: "account_mismatch" });
+    }
     return executionStore.list(parsedAccount.data);
   });
 
@@ -130,6 +171,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     const parsedAccount = Bytes32HexSchema.safeParse(accountIdHash);
     if (typeof executionId !== "string" || !parsedAccount.success) {
       return reply.code(400).send({ error: "invalid_execution_lookup" });
+    }
+    if (request.authAccountIdHash && parsedAccount.data !== request.authAccountIdHash) {
+      return reply.code(403).send({ error: "account_mismatch" });
     }
     const record = await executionStore.get(executionId, parsedAccount.data);
     if (!record) return reply.code(404).send({ error: "execution_not_found" });
@@ -143,6 +187,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     if (typeof executionId !== "string" || !parsedAccount.success) {
       return reply.code(400).send({ error: "invalid_execution_lookup" });
     }
+    if (request.authAccountIdHash && parsedAccount.data !== request.authAccountIdHash) {
+      return reply.code(403).send({ error: "account_mismatch" });
+    }
     const record = await executionService.sync(executionId, parsedAccount.data);
     if (!record) return reply.code(404).send({ error: "execution_not_found" });
     return reply.code(200).send(record);
@@ -154,6 +201,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     const parsedAccount = Bytes32HexSchema.safeParse(accountIdHash);
     if (typeof executionId !== "string" || !parsedAccount.success) {
       return reply.code(400).send({ error: "invalid_execution_lookup" });
+    }
+    if (request.authAccountIdHash && parsedAccount.data !== request.authAccountIdHash) {
+      return reply.code(403).send({ error: "account_mismatch" });
     }
     try {
       const record = await executionService.retry(executionId, parsedAccount.data);

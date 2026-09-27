@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SearchResponseSchema, offerSnapshotHash } from "@midnight-hackathon/shared";
+import { SearchResponseSchema, offerSnapshotHash, sha256Hex } from "@midnight-hackathon/shared";
 import { buildApp } from "./app.js";
 
 const fixedNow = "2026-09-24T12:00:00.000Z";
@@ -186,6 +186,55 @@ describe("search API", () => {
       message: "Jev could not evaluate the search request",
     });
     expect(response.body).not.toContain("invalid secret");
+    await app.close();
+  });
+});
+
+describe("Privy-authenticated API", () => {
+  it("requires a valid session and scopes execution history to its DID", async () => {
+    const app = buildApp({
+      environment: { JEV_PROVIDER: "mock" },
+      authVerifier: async (token) => {
+        if (token !== "valid-token") throw new Error("invalid token");
+        return "did:privy:alice";
+      },
+    });
+    const aliceHash = await sha256Hex("privy:did:privy:alice");
+    const bobHash = await sha256Hex("privy:did:privy:bob");
+
+    expect((await app.inject({ method: "POST", url: "/v1/searches", payload: validRequest })).statusCode).toBe(401);
+    expect((await app.inject({
+      method: "GET", url: `/v1/executions?accountIdHash=${aliceHash}`,
+      headers: { authorization: "Bearer invalid-token" },
+    })).statusCode).toBe(401);
+    expect((await app.inject({
+      method: "GET", url: `/v1/executions?accountIdHash=${bobHash}`,
+      headers: { authorization: "Bearer valid-token" },
+    })).statusCode).toBe(403);
+    const search = await app.inject({
+      method: "POST", url: "/v1/searches", payload: validRequest,
+      headers: { authorization: "Bearer valid-token" },
+    });
+    const offer = SearchResponseSchema.parse(search.json()).offers[0]!.offer;
+    expect((await app.inject({
+      method: "POST", url: "/v1/executions",
+      headers: { authorization: "Bearer valid-token" },
+      payload: {
+        approvalId: "5980675d-1412-4bbb-b5f4-57bcbb59245d",
+        accountIdHash: bobHash,
+        intentId: validRequest.intentId,
+        publicRequirement: validRequest.publicRequirement,
+        offer,
+        offerSnapshotHash: await offerSnapshotHash(offer),
+        commitRangeTransactionId: "demo-range",
+        commitVerifyTransactionId: "demo-verify",
+        approvedAt: fixedNow,
+      },
+    })).statusCode).toBe(403);
+    expect((await app.inject({
+      method: "GET", url: `/v1/executions?accountIdHash=${aliceHash}`,
+      headers: { authorization: "Bearer valid-token" },
+    })).statusCode).toBe(200);
     await app.close();
   });
 });

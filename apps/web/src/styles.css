@@ -125,6 +125,26 @@ button:disabled { cursor: not-allowed; }
 .wallet-button:not(:disabled):hover { background: #f8f9fa; }
 .wallet-button.connected { color: var(--blue-dark); background: var(--blue-soft); border-color: transparent; }
 .wallet-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.account-pill { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 9px 12px; color: var(--blue-dark); background: var(--blue-soft); border-radius: 11px; font-size: 12px; font-weight: 700; }
+
+.login-page { min-height: 100vh; display: flex; flex-direction: column; background: radial-gradient(circle at 19% 20%, #e3f0ff 0, transparent 32%), #f7f9fc; }
+.login-header { height: 82px; width: min(1180px, calc(100% - 48px)); margin: 0 auto; display: flex; align-items: center; gap: 11px; font-size: 19px; letter-spacing: -.4px; }
+.login-main { width: min(1100px, calc(100% - 48px)); flex: 1; margin: 0 auto; display: grid; grid-template-columns: 1.2fr .8fr; align-items: center; gap: 60px; padding: 40px 0 100px; }
+.login-copy h1 { margin: 22px 0 19px; font-size: clamp(42px, 5vw, 68px); line-height: 1.2; letter-spacing: -3px; }
+.login-copy h1 em { color: var(--blue); font-style: normal; }
+.login-copy > p { max-width: 570px; margin: 0; color: var(--muted); font-size: 16px; line-height: 1.8; }
+.login-benefits { display: flex; flex-wrap: wrap; gap: 11px; margin-top: 34px; }
+.login-benefits span { display: inline-flex; align-items: center; gap: 7px; padding: 10px 13px; color: #4e5968; background: white; border: 1px solid #edf0f2; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.login-benefits svg { width: 15px; color: var(--blue); }
+.login-card { padding: 38px; background: white; border-radius: 27px; box-shadow: 0 24px 72px rgba(30, 53, 81, .09); }
+.login-card-icon { width: 54px; height: 54px; margin-bottom: 24px; display: grid; place-items: center; color: var(--blue); background: var(--blue-soft); border-radius: 16px; }
+.login-card-icon svg { width: 28px; }
+.login-card h2 { margin: 8px 0; font-size: 25px; letter-spacing: -.8px; }
+.login-card p { margin: 0 0 29px; color: var(--muted); font-size: 13px; }
+.login-button { width: 100%; display: flex; align-items: center; justify-content: center; gap: 9px; }
+.login-card > small { display: block; margin-top: 16px; color: var(--subtle); font-size: 10px; text-align: center; }
+.login-setup { padding: 13px; color: #a45b13; background: #fff7e8; border-radius: 11px; font-size: 12px; line-height: 1.6; }
+.login-setup code { font-size: 11px; }
 
 main { min-height: calc(100vh - 144px); }
 
@@ -743,6 +763,7 @@ footer svg { width: 14px; }
 @keyframes rise { from { opacity: 0; transform: translateY(10px) scale(.98); } }
 
 @media (max-width: 900px) {
+  .login-main { grid-template-columns: 1fr; gap: 38px; max-width: 650px; }
   .intent-layout { grid-template-columns: 1fr; }
   .privacy-card { min-height: 480px; }
   .privacy-visual { margin-left: 0; }
@@ -751,6 +772,12 @@ footer svg { width: 14px; }
 }
 
 @media (max-width: 640px) {
+  .login-header { height: 68px; width: calc(100% - 36px); }
+  .login-main { width: calc(100% - 36px); padding: 35px 0 65px; }
+  .login-copy h1 { font-size: 42px; }
+  .login-copy > p { font-size: 14px; }
+  .login-card { padding: 27px 22px; }
+  .account-pill { max-width: 100px; }
   .topbar { height: 64px; padding: 0 16px; }
   .brand { font-size: 16px; }
   .brand-mark { width: 31px; height: 31px; }

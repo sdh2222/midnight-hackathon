@@ -61,14 +61,14 @@ const initialForm: IntentForm = {
   unit: "piece",
   destinationCountry: "KR",
   keywords: "nitrile gloves, industrial, powder-free",
-  requiredBy: "2026-10-20",
+  requiredBy: "",
   priceMaxKrw: "2700000",
 };
 
 const steps = [
   { id: "intent", label: "요청 입력", helper: "구매 조건 설정" },
   { id: "compare", label: "후보 비교", helper: "AI 검색 결과" },
-  { id: "approved", label: "승인 완료", helper: "ZK 검증 기록" },
+  { id: "approved", label: "승인 완료", helper: "검증 기록" },
 ] as const;
 
 const sortLabels: Record<string, string> = {
@@ -80,7 +80,7 @@ const sortLabels: Record<string, string> = {
 const statusLabels: Record<string, string> = {
   deal_approved: "승인됨",
   verifying: "검증 중",
-  verified: "ZK 검증 완료",
+  verified: "검증 완료",
   executing: "주문 준비 중",
   retrying: "재시도 중",
   order_submitted: "주문 요청됨",
@@ -111,7 +111,12 @@ function stageIndex(stage: Stage): number {
   return steps.findIndex((step) => (step.id as string) === stage);
 }
 
-export function App() {
+export function App({ userId, userLabel, apiFetch, onLogout }: {
+  userId: string;
+  userLabel: string;
+  apiFetch: typeof globalThis.fetch;
+  onLogout: () => void;
+}) {
   const workflowRef = useRef(createProcurementContractWorkflow());
   const [stage, setStage] = useState<Stage>("intent");
   const [form, setForm] = useState<IntentForm>(initialForm);
@@ -136,16 +141,19 @@ export function App() {
 
   useEffect(() => {
     let active = true;
-    let attempts = 0;
-    const check = async () => {
-      attempts += 1;
-      const available = await workflowRef.current.detectWallet();
+    if (workflowRef.current.mode !== "demo") {
+      setWalletStatus("missing");
+      return () => { active = false; };
+    }
+    void workflowRef.current.connectWallet().then((connection) => {
       if (!active) return;
-      if (available) setWalletStatus("ready");
-      else if (attempts >= 40) setWalletStatus("missing");
-      else window.setTimeout(() => void check(), 100);
-    };
-    void check();
+      setWallet(connection);
+      setWalletStatus("connected");
+    }).catch((failure) => {
+      if (!active) return;
+      setError(failure instanceof Error ? failure.message : "거래 준비에 실패했습니다.");
+      setWalletStatus("missing");
+    });
     return () => {
       active = false;
     };
@@ -157,7 +165,7 @@ export function App() {
     .join(",");
 
   useEffect(() => {
-    if (stage !== "history" || !wallet || !synchronizableExecutionIds) return;
+    if (stage !== "history" || !synchronizableExecutionIds) return;
     let active = true;
     let synchronizing = false;
 
@@ -165,11 +173,11 @@ export function App() {
       if (synchronizing) return;
       synchronizing = true;
       try {
-        const accountIdHash = await sha256Hex(wallet.address);
+        const accountIdHash = await sha256Hex(`privy:${userId}`);
         const ids = synchronizableExecutionIds.split(",");
         const updates = await Promise.all(ids.map(async (executionId) => {
           try {
-            return await syncExecutionHistory(executionId, accountIdHash);
+            return await syncExecutionHistory(executionId, accountIdHash, apiFetch);
           } catch {
             return null;
           }
@@ -191,7 +199,7 @@ export function App() {
       active = false;
       window.clearInterval(interval);
     };
-  }, [stage, wallet, synchronizableExecutionIds]);
+  }, [stage, synchronizableExecutionIds, userId, apiFetch]);
 
   const maxBudget = Number(form.priceMaxKrw);
   const selectedOffer = useMemo(
@@ -200,26 +208,16 @@ export function App() {
   );
   const selectedEligible = selectedOffer
     ? Number(selectedOffer.offer.convertedTotalKrw) <= maxBudget
+      && (!form.requiredBy || Boolean(selectedOffer.offer.deliveryDate
+        && selectedOffer.offer.deliveryDate <= form.requiredBy))
     : false;
   const eligibleCount = searchResult?.offers.filter(
-    ({ offer }) => Number(offer.convertedTotalKrw) <= maxBudget,
+    ({ offer }) => Number(offer.convertedTotalKrw) <= maxBudget
+      && (!form.requiredBy || Boolean(offer.deliveryDate && offer.deliveryDate <= form.requiredBy)),
   ).length ?? 0;
 
   function updateField(field: keyof IntentForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
-  }
-
-  async function connectWallet() {
-    setError(null);
-    setWalletStatus("connecting");
-    try {
-      const connection = await workflowRef.current.connectWallet();
-      setWallet(connection);
-      setWalletStatus("connected");
-    } catch (walletError) {
-      setError(walletError instanceof Error ? walletError.message : "지갑 연결에 실패했습니다.");
-      setWalletStatus("ready");
-    }
   }
 
   async function recoverFromFailedSearch(): Promise<string> {
@@ -246,15 +244,9 @@ export function App() {
     setStage("history");
     setHistoryError(null);
     setHistoryActionError(null);
-    if (!wallet) {
-      setHistoryRecords([]);
-      setIsLoadingHistory(false);
-      setHistoryError("내 거래 내역을 확인하려면 먼저 지갑을 연결해 주세요.");
-      return;
-    }
     setIsLoadingHistory(true);
     try {
-      setHistoryRecords(await listExecutionHistory(await sha256Hex(wallet.address)));
+      setHistoryRecords(await listExecutionHistory(await sha256Hex(`privy:${userId}`), apiFetch));
     } catch (historyFailure) {
       setHistoryError(
         historyFailure instanceof Error
@@ -267,13 +259,14 @@ export function App() {
   }
 
   async function retryOrder(record: ExecutionHistoryRecord) {
-    if (!wallet || retryingExecutionId) return;
+    if (retryingExecutionId) return;
     setHistoryActionError(null);
     setRetryingExecutionId(record.executionId);
     try {
       const updated = await retryExecutionHistory(
         record.executionId,
-        await sha256Hex(wallet.address),
+        await sha256Hex(`privy:${userId}`),
+        apiFetch,
       );
       setHistoryRecords((records) => records.map((candidate) => (
         candidate.executionId === updated.executionId ? updated : candidate
@@ -309,7 +302,7 @@ export function App() {
       return;
     }
     if (!wallet) {
-      setError("먼저 Midnight 지갑을 연결해 주세요.");
+      setError("거래 기능을 준비하는 중입니다. 잠시 후 다시 시도해 주세요.");
       return;
     }
 
@@ -327,10 +320,11 @@ export function App() {
       }
 
       setChainPhase("search");
-      const result = await searchOffers(buildSearchRequest(lock.intentId, parsed.data));
+      const result = await searchOffers(buildSearchRequest(lock.intentId, parsed.data), apiFetch);
       setSearchResult(result);
       const firstEligible = result.offers.find(
-        ({ offer }) => Number(offer.convertedTotalKrw) <= maxBudget,
+        ({ offer }) => Number(offer.convertedTotalKrw) <= maxBudget
+          && (!form.requiredBy || Boolean(offer.deliveryDate && offer.deliveryDate <= form.requiredBy)),
       );
       setSelectedOfferId(firstEligible?.offer.offerId ?? result.offers[0]?.offer.offerId ?? null);
       setStage("compare");
@@ -377,7 +371,7 @@ export function App() {
       try {
         const persisted = await createExecutionHistory({
           approvalId,
-          accountIdHash: await sha256Hex(wallet.address),
+          accountIdHash: await sha256Hex(`privy:${userId}`),
           intentId: searchResult.intentId,
           publicRequirement: lockedIntent.publicRequirement,
           offer: selectedOffer.offer,
@@ -385,7 +379,7 @@ export function App() {
           commitRangeTransactionId: lockedIntent.commitRangeTransactionId,
           commitVerifyTransactionId: verified.commitVerifyTransactionId,
           approvedAt: verified.verifiedAt,
-        });
+        }, apiFetch);
         nextApproval.executionRecord = persisted;
       } catch (persistenceFailure) {
         nextApproval.persistenceError = persistenceFailure instanceof Error
@@ -431,14 +425,6 @@ export function App() {
     }
   }
 
-  const walletLabel = {
-    detecting: "지갑 확인 중",
-    missing: "Lace 지갑 없음",
-    ready: "지갑 연결",
-    connecting: "연결 중",
-    connected: wallet?.address ? compactHash(wallet.address) : "연결됨",
-  }[walletStatus];
-
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -457,30 +443,20 @@ export function App() {
           </button>
           <span className="network-pill">
             <i />
-            {workflowRef.current.mode === "demo" ? "Demo network" : "Midnight local"}
+            {workflowRef.current.mode === "demo"
+              ? walletStatus === "connected" ? "Demo ready" : "Demo 준비 중"
+              : "실체인 연동 준비 중"}
           </span>
-          <button
-            className={`wallet-button ${wallet ? "connected" : ""}`}
-            type="button"
-            onClick={connectWallet}
-            disabled={
-              walletStatus === "detecting"
-              || walletStatus === "connecting"
-              || walletStatus === "missing"
-              || walletStatus === "connected"
-            }
-          >
-            <span className="wallet-dot" />
-            {walletLabel}
-          </button>
+          <span className="account-pill">{userLabel}</span>
+          <button className="nav-button" type="button" onClick={onLogout}>로그아웃</button>
         </div>
       </header>
 
       <main>
         {stage !== "history" && <section className="hero">
-          <span className="hero-chip"><SparkIcon /> AI가 찾고, Midnight가 지켜요</span>
+          <span className="hero-chip"><SparkIcon /> AI 공급처 탐색 · 프라이버시 데모</span>
           <h1>기업 구매를 더 빠르고<br /><em>안전하게.</em></h1>
-          <p>필요한 품목만 알려주세요. AI가 공급처를 비교하고<br className="desktop-break" /> 민감한 예산은 공개하지 않은 채 검증해 드려요.</p>
+          <p>필요한 품목만 알려주세요. AI가 공급처를 비교하고<br className="desktop-break" /> 민감한 예산은 외부 검색 서비스에 보내지 않아요.</p>
         </section>}
 
         {stage !== "history" && <nav className="stepper" aria-label="구매 진행 단계">
@@ -616,6 +592,11 @@ export function App() {
               </div>
 
               {error && <div className="error-banner" role="alert">{error}</div>}
+              {workflowRef.current.mode !== "demo" && (
+                <div className="error-banner" role="status">
+                  Privy 로그인으로 실제 Midnight 거래를 진행하는 방식은 후속 연동 예정입니다. 데모 테스트는 VITE_MIDNIGHT_MODE=demo로 실행해 주세요.
+                </div>
+              )}
 
               <button className="primary-button search-button" type="submit" disabled={isSearching}>
                 {isSearching && chainPhase === "commit-range" && (
@@ -638,11 +619,11 @@ export function App() {
               </div>
               <span className="section-kicker blue">Privacy by design</span>
               <h3>예산은 숨기고,<br />조건 충족만 증명해요.</h3>
-              <p>민감한 구매 한도는 브라우저에 보관되고, 영지식 증명으로 선택한 견적이 조건을 만족하는지만 확인합니다.</p>
+              <p>민감한 구매 한도는 브라우저에 보관돼요. 현재 데모에서는 로컬로 조건을 확인하며, 실제 영지식 증명과 체인 기록은 후속 연동 단계입니다.</p>
               <div className="privacy-list">
                 <div><SearchIcon /><span><strong>AI가 보는 정보</strong>품목 · 수량 · 납기 · 키워드</span></div>
                 <div><LockIcon /><span><strong>비공개 정보</strong>최대 예산 · salt · 검증 원문</span></div>
-                <div><CheckIcon /><span><strong>체인에 남는 정보</strong>commitment · 검증 결과</span></div>
+                <div><CheckIcon /><span><strong>데모 검증 결과</strong>예산 조건 충족 · 선택 내역</span></div>
               </div>
             </aside>
           </section>
@@ -654,7 +635,7 @@ export function App() {
               <div>
                 <span className="section-kicker">AI 추천 결과</span>
                 <h2>조건에 맞는 후보를 찾았어요</h2>
-                <p>총 {searchResult.offers.length}개 중 비공개 예산을 충족하는 후보는 <strong>{eligibleCount}개</strong>예요.</p>
+                <p>총 {searchResult.offers.length}개 중 상품금액 예상치가 예산 이내인 후보는 <strong>{eligibleCount}개</strong>예요.</p>
               </div>
               <button className="text-button" type="button" onClick={() => setStage("intent")}>
                 검색 조건 보기
@@ -674,7 +655,8 @@ export function App() {
             <div className="offer-list">
               {searchResult.offers.map((rankedOffer, index) => {
                 const { offer } = rankedOffer;
-                const eligible = Number(offer.convertedTotalKrw) <= maxBudget;
+                const eligible = Number(offer.convertedTotalKrw) <= maxBudget
+                  && (!form.requiredBy || Boolean(offer.deliveryDate && offer.deliveryDate <= form.requiredBy));
                 const selected = selectedOfferId === offer.offerId;
                 return (
                   <article
@@ -694,12 +676,13 @@ export function App() {
                         <div>
                           <div className="offer-badges">
                             <span className="rank-badge">추천 {index + 1}</span>
+                            {offer.pricingBasis === "catalog_estimate" && <span className="rank-badge">Alibaba 실시간 상품</span>}
                             <span className={`fit-badge ${eligible ? "fit" : "over"}`}>
-                              {eligible ? "예산 조건 충족" : "예산 초과"}
+                              {eligible ? "예상 금액 이내" : Number(offer.convertedTotalKrw) > maxBudget ? "예산 초과 예상" : "납기 미확인"}
                             </span>
                           </div>
                           <h3>{offer.title}</h3>
-                          <p>{offer.supplierId} · {offer.variant ?? "표준 사양"}</p>
+                          <p>{offer.supplierName ?? offer.supplierId} · {offer.variant ?? "표준 사양"}</p>
                         </div>
                         <div className="score">
                           <strong>{Math.round(rankedOffer.relevanceScore * 100)}</strong>
@@ -708,9 +691,9 @@ export function App() {
                       </div>
                       <div className="offer-metrics">
                         <div className="price-metric">
-                          <span>총 예상 금액</span>
+                          <span>{offer.pricingBasis === "catalog_estimate" ? "상품금액 예상 상한" : "총 예상 금액"}</span>
                           <strong>{won(offer.convertedTotalKrw)}</strong>
-                          <small>수량 및 배송비 반영</small>
+                          <small>{offer.pricingBasis === "catalog_estimate" ? "배송비·관세 제외 · 환율은 데모 기준" : "수량 및 배송비 반영"}</small>
                         </div>
                         <div>
                           <span>주문 수량</span>
@@ -719,7 +702,7 @@ export function App() {
                         </div>
                         <div>
                           <span>예상 납기</span>
-                          <strong>{offer.leadTimeDays ?? "-"}일</strong>
+                          <strong>{offer.leadTimeDays === undefined ? "미확인" : `${offer.leadTimeDays}일`}</strong>
                           <small>{offer.deliveryDate ?? "일정 미정"}</small>
                         </div>
                         <div>
@@ -741,7 +724,7 @@ export function App() {
               <div className="approval-selection">
                 <span className="selection-icon"><BoxIcon /></span>
                 <span>
-                  <small>선택한 견적</small>
+                  <small>{selectedOffer?.offer.pricingBasis === "catalog_estimate" ? "선택한 상품 예상금액" : "선택한 견적"}</small>
                   <strong>{selectedOffer?.offer.title ?? "후보를 선택해 주세요"}</strong>
                 </span>
               </div>
@@ -768,7 +751,7 @@ export function App() {
               <div>
                 <span className="section-kicker">Purchase history</span>
                 <h1>거래 내역</h1>
-                <p>승인한 견적과 Midnight 검증 기록을 한곳에서 확인하세요.</p>
+                <p>승인한 상품과 데모 검증 기록을 한곳에서 확인하세요.</p>
               </div>
               <button className="primary-button" type="button" onClick={() => void startOver()}>
                 새 구매 요청 <ArrowIcon />
@@ -805,14 +788,14 @@ export function App() {
                       <div>
                         <span className="history-date">{new Date(record.approvedAt).toLocaleString("ko-KR")}</span>
                         <h2>{record.offer.title}</h2>
-                        <p>{record.offer.supplierId} · {record.offer.variant ?? "표준 사양"}</p>
+                        <p>{record.offer.supplierName ?? record.offer.supplierId} · {record.offer.variant ?? "표준 사양"}</p>
                       </div>
                       <span className={`status-badge status-${record.status}`}>
                         <CheckIcon /> {statusLabels[record.status] ?? record.status}
                       </span>
                     </div>
                     <div className="history-summary">
-                      <div><span>승인 금액</span><strong>{won(record.offer.convertedTotalKrw)}</strong></div>
+                      <div><span>{record.offer.pricingBasis === "catalog_estimate" ? "상품 예상금액" : "승인 금액"}</span><strong>{won(record.offer.convertedTotalKrw)}</strong></div>
                       <div><span>수량</span><strong>{number(record.offer.quantity)} {record.offer.unit}</strong></div>
                       <div><span>납기</span><strong>{record.offer.deliveryDate ?? "미정"}</strong></div>
                       <div><span>거래 조건</span><strong>{record.offer.incoterm ?? "협의"}</strong></div>
@@ -851,12 +834,12 @@ export function App() {
             <span className="success-mark"><CheckIcon /></span>
             <span className="section-kicker">Approval complete</span>
             <h2>견적 승인이 완료됐어요</h2>
-            <p>선택한 견적이 잠긴 예산 범위를 충족한다는 사실을 Midnight에 기록했습니다.</p>
+            <p>선택한 상품금액 예상치가 예산 이내인지 데모에서 확인하고 승인 내역을 저장했습니다. 실제 Midnight 트랜잭션은 전송하지 않았습니다.</p>
 
             <div className="approved-card">
               <div className="approved-offer">
                 <div>
-                  <small>{approval.rankedOffer.offer.supplierId}</small>
+                  <small>{approval.rankedOffer.offer.supplierName ?? approval.rankedOffer.offer.supplierId}</small>
                   <h3>{approval.rankedOffer.offer.title}</h3>
                   <span>{approval.rankedOffer.offer.variant ?? "표준 사양"}</span>
                 </div>
@@ -865,7 +848,7 @@ export function App() {
               <dl>
                 <div>
                   <dt>검증 상태</dt>
-                  <dd className="verified-status"><CheckIcon /> ZK 검증 완료</dd>
+                  <dd className="verified-status"><CheckIcon /> 데모 검증 완료</dd>
                 </div>
                 <div>
                   <dt>승인 시각</dt>
@@ -887,7 +870,7 @@ export function App() {
               <span>
                 <strong>
                   {approval.persistenceError
-                    ? "ZK 검증은 완료됐지만 내역 저장에 실패했어요"
+                    ? "데모 검증은 완료됐지만 내역 저장에 실패했어요"
                     : approval.executionRecord?.status === "failed"
                       ? "검증은 완료됐지만 Mock 주문 요청에 실패했어요"
                       : "Mock Alibaba 주문 요청이 접수됐어요"}
@@ -910,7 +893,7 @@ export function App() {
       </main>
 
       <footer>
-        <span><ShieldIcon /> Powered by Midnight zero-knowledge proofs</span>
+        <span><ShieldIcon /> Midnight ZK 연동을 준비 중인 데모</span>
         <span>민감한 구매 조건은 공개되지 않습니다.</span>
       </footer>
 
@@ -925,18 +908,20 @@ export function App() {
           >
             <span className="modal-icon"><ShieldIcon /></span>
             <h2 id="approval-title">이 견적을 승인할까요?</h2>
-            <p>승인하면 비공개 예산 범위 충족 여부를 증명하고, 견적 스냅샷을 결속합니다.</p>
+            <p>{selectedOffer.offer.pricingBasis === "catalog_estimate"
+              ? "Alibaba 상품 가격은 확정 견적이 아닙니다. 배송비·관세·실제 납기는 공급자 확인이 필요하며, 이 승인은 데모 주문 요청으로 기록됩니다."
+              : "승인하면 데모에서 예산 조건을 확인하고 견적 스냅샷을 저장합니다."}</p>
             <div className="modal-offer">
               <span>
-                <small>{selectedOffer.offer.supplierId}</small>
+                <small>{selectedOffer.offer.supplierName ?? selectedOffer.offer.supplierId}</small>
                 <strong>{selectedOffer.offer.title}</strong>
               </span>
               <b>{won(selectedOffer.offer.convertedTotalKrw)}</b>
             </div>
             <div className="budget-check">
               <CheckIcon />
-              비공개 예산 조건을 충족해요
-              <strong>검증 가능</strong>
+              상품금액 예상치가 비공개 예산 이내예요
+              <strong>데모 확인</strong>
             </div>
             <label className="confirm-check">
               <input
@@ -953,7 +938,7 @@ export function App() {
               </button>
               <button className="primary-button" type="button" disabled={!confirmed || isApproving} onClick={confirmApproval}>
                 {isApproving && chainPhase === "commit-verify"
-                  ? <><span className="spinner" /> ZK 검증 중</>
+                  ? <><span className="spinner" /> 데모 검증 중</>
                   : <><ShieldIcon /> 승인하고 검증하기</>}
               </button>
             </div>

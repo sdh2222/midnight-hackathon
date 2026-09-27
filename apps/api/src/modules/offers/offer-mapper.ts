@@ -38,13 +38,13 @@ export async function mapCatalogListingToOffer(
 ): Promise<Offer> {
   const quantity = Math.max(requirement.quantity, listing.minimumOrderQuantity);
   const unitPriceMinor = BigInt(listing.unitPriceMinor);
-  const shippingMinor = BigInt(listing.shippingMinor);
+  const shippingMinor = listing.shippingMinor === undefined ? undefined : BigInt(listing.shippingMinor);
   const itemTotalMinor = unitPriceMinor * BigInt(quantity);
   const convertedItemTotalKrw = ceilDivide(
     itemTotalMinor * options.krwPerCurrencyUnit,
     MINOR_UNITS,
   );
-  const shippingCostKrw = ceilDivide(
+  const shippingCostKrw = shippingMinor === undefined ? undefined : ceilDivide(
     shippingMinor * options.krwPerCurrencyUnit,
     MINOR_UNITS,
   );
@@ -66,6 +66,7 @@ export async function mapCatalogListingToOffer(
     providerListingId: listing.listingId,
     sourceId,
     supplierId: listing.supplierId,
+    ...(listing.supplierName ? { supplierName: listing.supplierName } : {}),
     title: listing.title,
     ...(listing.variant ? { variant: listing.variant } : {}),
     quantity,
@@ -73,11 +74,14 @@ export async function mapCatalogListingToOffer(
     minimumOrderQuantity: listing.minimumOrderQuantity,
     originalCurrency: listing.currency,
     originalUnitPrice: formatMinorUnits(listing.unitPriceMinor),
-    convertedTotalKrw: (convertedItemTotalKrw + shippingCostKrw).toString(),
-    shippingCostKrw: shippingCostKrw.toString(),
+    convertedTotalKrw: (convertedItemTotalKrw + (shippingCostKrw ?? 0n)).toString(),
+    ...(shippingCostKrw === undefined ? {} : { shippingCostKrw: shippingCostKrw.toString() }),
+    ...(listing.pricingBasis ? { pricingBasis: listing.pricingBasis } : {}),
     exchangeRateTimestamp: options.fetchedAt,
-    leadTimeDays: listing.leadTimeDays,
-    deliveryDate: addDays(options.fetchedAt, listing.leadTimeDays),
+    ...(listing.leadTimeDays === undefined ? {} : {
+      leadTimeDays: listing.leadTimeDays,
+      deliveryDate: addDays(options.fetchedAt, listing.leadTimeDays),
+    }),
     ...(listing.incoterm ? { incoterm: listing.incoterm } : {}),
     sourceUrl: listing.productUrl,
     fetchedAt: options.fetchedAt,

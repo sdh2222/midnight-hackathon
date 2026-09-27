@@ -5,17 +5,18 @@ private procurement workspace입니다.
 
 ## 구성
 
-- `apps/web`: 구매 요청 → 후보 비교 → 사용자 승인 React UI
-- `apps/api`: mock Alibaba catalog와 Jev 평가 파이프라인
+- `apps/web`: Privy 로그인 → 구매 요청 → 후보 비교 → 사용자 승인 React UI
+- `apps/api`: ReefAPI/Mock Alibaba catalog와 Jev 평가 파이프라인
 - `contract`: `commitRange`와 `commitVerify` Compact 컨트랙트
 - `packages/shared`: 요청, 견적, 검색 결과의 공통 스키마
 
-승인된 거래는 기본적으로 `apps/api/data/executions.json`에 저장되며 이 경로는
+승인된 데모 거래는 기본적으로 `apps/api/data/executions.json`에 저장되며 이 경로는
 Git에서 제외됩니다. 저장 레코드는 공개 견적과 체인 트랜잭션만 포함하고, 최대 예산과
 salt 및 원본 지갑 주소는 포함하지 않습니다.
 
 승인 직후 주문 상태 머신이 실행되고 Mock Alibaba 어댑터가 주문 접수 ID를 만듭니다.
 거래 내역 화면은 공급자 접수와 완료 상태를 동기화하며 실패 주문의 재시도를 지원합니다.
+ReefAPI는 실제 Alibaba.com 상품 검색에 사용하지만, 검색 카드 가격은 확정 견적이 아닙니다.
 현재 구현은 실제 Alibaba에 주문을 전송하지 않으며, 추후 `OrderAdapter`만 교체하도록
 분리되어 있습니다.
 
@@ -30,6 +31,13 @@ cp .env.example .env
 npm run dev:api
 npm run dev:web
 ```
+
+루트 `.env`에 동일한 Privy App ID를 `PRIVY_APP_ID`와 `VITE_PRIVY_APP_ID`에 넣고,
+ReefAPI 키를 `REEF_API_KEY`에 설정해야 실제 검색이 됩니다. Privy 대시보드에서
+로컬 앱 도메인과 로그인 방식을 허용하세요. 키 없이 데모를 확인하려면
+`CATALOG_PROVIDER=mock`, `JEV_PROVIDER=mock`, `VITE_MIDNIGHT_MODE=demo`를 사용합니다.
+Privy 로그인은 계정 인증이며 Midnight 거래 서명은 아닙니다. 실제 지갑 없는 체인
+연동은 후속 설계 과제입니다.
 
 로컬 Midnight 환경은 node `:9944`, indexer `:8088`, proof server `:6300`을
 사용합니다. proof server는 증명 witness를 처리하므로 로컬에서만 실행하세요.

@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { buildApp } from "./app.js";
+import { createPrivyVerifier } from "./auth/privy-verifier.js";
 import { createOrderAdapter } from "./integrations/orders/create-order-adapter.js";
 import { JsonFileExecutionStore } from "./modules/executions/execution-store.js";
 
@@ -14,7 +15,12 @@ try {
 const port = Number.parseInt(process.env.API_PORT ?? "3001", 10);
 const executionStorePath = process.env.EXECUTION_STORE_PATH
   ?? fileURLToPath(new URL("../data/executions.json", import.meta.url));
+const privyAppId = process.env.PRIVY_APP_ID?.trim();
+if (!privyAppId) {
+  throw new Error("PRIVY_APP_ID is required for the API");
+}
 const app = buildApp({
+  authVerifier: createPrivyVerifier(privyAppId),
   executionStore: new JsonFileExecutionStore(executionStorePath),
   orderAdapter: createOrderAdapter(process.env),
   executionRetryPolicy: {

@@ -46,8 +46,8 @@ export class MockJevProvider implements JevProvider {
         const unitScore = offer.unit.toLowerCase() === requirement.unit.toLowerCase() ? 1 : 0.2;
 
         let dateScore = 1;
-        if (requirement.requiredBy && offer.deliveryDate) {
-          dateScore = offer.deliveryDate <= requirement.requiredBy ? 1 : 0;
+        if (requirement.requiredBy) {
+          dateScore = offer.deliveryDate && offer.deliveryDate <= requirement.requiredBy ? 1 : 0;
         }
 
         const relevanceScore = roundScore(
@@ -59,7 +59,9 @@ export class MockJevProvider implements JevProvider {
           offer,
           relevanceScore,
           confidence,
-          needsReview: relevanceScore < 0.65 || offer.quantity !== requirement.quantity,
+          needsReview: relevanceScore < 0.65 || offer.quantity !== requirement.quantity
+            || offer.pricingBasis === "catalog_estimate"
+            || Boolean(requirement.requiredBy && !offer.deliveryDate),
         };
       })
       .sort((left, right) =>

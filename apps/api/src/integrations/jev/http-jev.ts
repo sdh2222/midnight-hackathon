@@ -207,6 +207,7 @@ export class HttpJevProvider implements JevProvider {
       unit: offer.unit,
       minimumOrderQuantity: offer.minimumOrderQuantity,
       convertedTotalKrw: offer.convertedTotalKrw,
+      pricingBasis: offer.pricingBasis,
       leadTimeDays: offer.leadTimeDays,
       deliveryDate: offer.deliveryDate,
       incoterm: offer.incoterm,
@@ -223,6 +224,7 @@ export class HttpJevProvider implements JevProvider {
               "Use only the public requirement and offer fields in state.",
               "Consider item relevance, quantity, unit, required date, and keywords.",
               "Do not infer or evaluate any private buyer constraint.",
+              "A catalog estimate excludes unknown shipping, and an absent delivery date is unverified.",
             ],
           },
           criteria: [...SCORE_LEVELS],
@@ -253,7 +255,9 @@ export class HttpJevProvider implements JevProvider {
           offer,
           relevanceScore,
           confidence,
-          needsReview: relevanceScore < 0.65 || confidence < this.minimumConfidence,
+          needsReview: relevanceScore < 0.65 || confidence < this.minimumConfidence
+            || offer.pricingBasis === "catalog_estimate"
+            || Boolean(requirement.requiredBy && !offer.deliveryDate),
         };
       })
       .sort((left, right) =>
